@@ -1,0 +1,27 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# DuckDB
+data/*.duckdb
+data/*.duckdb.wal
+
+# dbt
+dbt_chesslens/target/
+dbt_chesslens/dbt_packages/
+dbt_chesslens/logs/
+
+# Dagster
+orchestration/.dagster/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+# Environment
+.env

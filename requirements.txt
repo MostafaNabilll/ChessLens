@@ -1,0 +1,24 @@
+# Ingestion
+requests>=2.31.0
+chessdotcom>=1.16.0
+
+# Storage
+duckdb>=0.10.0
+
+# Transformation
+dbt-core>=1.7.0
+dbt-duckdb>=1.7.0
+
+# Orchestration
+dagster>=1.6.0
+dagster-webserver>=1.6.0
+dagster-dbt>=0.22.0
+dagster-duckdb>=0.22.0
+
+# Dashboard
+streamlit>=1.30.0
+plotly>=5.18.0
+pandas>=2.1.0
+
+# Development
+pytest>=7.4.0
