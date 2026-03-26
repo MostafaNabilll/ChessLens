@@ -1,6 +1,5 @@
 # Ingestion
 requests>=2.31.0
-chessdotcom>=1.16.0
 
 # Storage
 duckdb>=0.10.0
