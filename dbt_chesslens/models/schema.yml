@@ -1,0 +1,38 @@
+version: 2
+
+sources:
+  - name: raw
+    description: "Raw data ingested from chess.com API"
+    schema: main
+    tables:
+      - name: raw_games
+        description: "Raw JSON game data from chess.com API"
+
+models:
+  # BRONZE
+  - name: bronze_raw_games
+    description: "Raw game records, one row per game, no transformations applied"
+
+  # SILVER
+  - name: silver_games
+    description: "Cleaned and typed game records with parsed fields"
+  
+  # GOLD
+  - name: gold_sessions
+    description: "Playing sessions detected by 30-min gap between games"
+
+  - name: gold_tilt_analysis
+    description: "Performance impact of consecutive losses"
+  
+  - name: gold_time_of_day
+    description: "Win rate patterns by hour and day of week" 
+  
+  - name: gold_opening_trends
+    description: "Monthly opening performance with trend detection"
+  
+  - name: gold_opponent_analysis
+    description: "Performance segmented by opponent rating range"
+
+  - name: gold_time_control_comparison
+    description: "Side-by-side metrics across time controls"
+  

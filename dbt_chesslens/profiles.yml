@@ -1,0 +1,7 @@
+chesslens:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: '../data/chesslens.duckdb'
+      threads: 4
