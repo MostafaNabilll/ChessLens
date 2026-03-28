@@ -12,10 +12,11 @@ data/*.duckdb.wal
 dbt_chesslens/target/
 dbt_chesslens/dbt_packages/
 dbt_chesslens/logs/
+logs/
 
 # Dagster
 orchestration/.dagster/
-
+.tmp_dagster_home*/
 # IDE
 .vscode/
 .idea/
