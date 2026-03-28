@@ -7,32 +7,209 @@ sources:
     tables:
       - name: raw_games
         description: "Raw JSON game data from chess.com API"
+        columns:
+          - name: game_url
+            description: "Unique URL of the game on chess.com"
+            tests:
+              - unique
+              - not_null
+          - name: game_json
+            description: "Full game data as JSON string from chess.com API"
+            tests:
+              - not_null
 
 models:
-  # BRONZE
   - name: bronze_raw_games
     description: "Raw game records, one row per game, no transformations applied"
+    columns:
+      - name: game_url
+        description: "Unique URL of the game on chess.com"
+        tests:
+          - unique
+          - not_null
+      - name: ingested_at
+        description: "Timestamp when the record was loaded into the bronze layer"
 
-  # SILVER
   - name: silver_games
-    description: "Cleaned and typed game records with parsed fields"
-  
-  # GOLD
-  - name: gold_sessions
-    description: "Playing sessions detected by 30-min gap between games"
+    description: "Cleaned and typed game records with parsed fields from chess.com JSON"
+    columns:
+      - name: game_id
+        description: "Unique game identifier from chess.com UUID"
+        tests:
+          - unique
+          - not_null
+      - name: end_at
+        description: "UTC timestamp when the game ended, converted from Unix epoch"
+        tests:
+          - not_null
+      - name: time_control
+        description: "Raw time control string from chess.com (e.g. 300, 600+5)"
+      - name: time_class
+        description: "Game speed category"
+        tests:
+          - accepted_values:
+              values: ['bullet', 'blitz', 'rapid', 'daily']
+      - name: player_color
+        description: "Which side the player was on"
+        tests:
+          - accepted_values:
+              values: ['white', 'black']
+      - name: player_rating
+        description: "Player rating at the time of the game"
+        tests:
+          - not_null
+      - name: opponent_rating
+        description: "Opponent rating at the time of the game"
+        tests:
+          - not_null
+      - name: rating_diff
+        description: "Player rating minus opponent rating, positive means player is higher rated"
+      - name: result
+        description: "Simplified game outcome from the player perspective"
+        tests:
+          - accepted_values:
+              values: ['win', 'loss', 'draw']
+      - name: result_type
+        description: "Specific result reason from chess.com (e.g. checkmate, timeout, resigned)"
+      - name: opening_name
+        description: "Full opening name extracted from chess.com ECO URL"
+      - name: opening_family
+        description: "Shortened opening name with move-specific variations removed"
+      - name: opening_eco
+        description: "Full chess.com ECO URL for the opening played"
+      - name: pgn
+        description: "Full PGN notation of the game including move timestamps"
 
   - name: gold_tilt_analysis
-    description: "Performance impact of consecutive losses"
-  
+    description: "Performance impact of consecutive losses on subsequent games"
+    columns:
+      - name: game_id
+        description: "Unique game identifier"
+        tests:
+          - unique
+          - not_null
+      - name: end_at
+        description: "Timestamp when the game ended"
+      - name: time_class
+        description: "Game speed category"
+      - name: result
+        description: "Game outcome (win/loss/draw)"
+      - name: result_type
+        description: "Specific result reason from chess.com"
+      - name: player_rating
+        description: "Player rating at the time of the game"
+      - name: opponent_rating
+        description: "Opponent rating at the time of the game"
+      - name: consecutive_losses_before
+        description: "Number of consecutive losses immediately before this game"
+      - name: is_tilted
+        description: "True if 3 or more consecutive losses occurred before this game"
+
   - name: gold_time_of_day
-    description: "Win rate patterns by hour and day of week" 
-  
+    description: "Win rate patterns by hour of day and day of week"
+    columns:
+      - name: hour_of_day
+        description: "Hour of the day the game was played (0-23)"
+      - name: day_of_week
+        description: "Day of the week the game was played (0=Sunday, 6=Saturday)"
+      - name: hour_bucket
+        description: "Time of day grouped into four periods"
+        tests:
+          - accepted_values:
+              values: ['morning', 'afternoon', 'evening', 'night']
+      - name: time_class
+        description: "Game speed category"
+      - name: games_played
+        description: "Total number of games in this time slot and time class"
+      - name: win_rate
+        description: "Proportion of games won (0 to 1)"
+      - name: avg_rating_delta
+        description: "Average rating difference against opponents in this group"
+
   - name: gold_opening_trends
     description: "Monthly opening performance with trend detection"
-  
+    columns:
+      - name: opening_family
+        description: "Shortened opening name used for grouping"
+      - name: time_class
+        description: "Game speed category"
+      - name: month
+        description: "First day of the month for this aggregation"
+      - name: games_played
+        description: "Number of games played with this opening in this month"
+      - name: win_rate
+        description: "Proportion of games won (0 to 1)"
+      - name: avg_opponent_rating
+        description: "Average opponent rating faced with this opening"
+      - name: prev_month_win_rate
+        description: "Win rate for the same opening in the previous month"
+      - name: trend
+        description: "Performance trend compared to previous month (5% threshold)"
+        tests:
+          - accepted_values:
+              values: ['new', 'improving', 'declining', 'stable']
+
   - name: gold_opponent_analysis
     description: "Performance segmented by opponent rating range"
+    columns:
+      - name: time_class
+        description: "Game speed category"
+      - name: rating_bucket
+        description: "Opponent strength relative to player based on rating difference"
+        tests:
+          - accepted_values:
+              values: ['much_lower', 'lower', 'equal', 'higher', 'much_higher']
+      - name: games_played
+        description: "Total games played against this rating range"
+      - name: win_rate
+        description: "Proportion of games won (0 to 1)"
+      - name: avg_opponent_rating
+        description: "Average rating of opponents in this bucket"
+      - name: upset_wins
+        description: "Number of games won where expected win rate was below 50%"
+      - name: upset_rate
+        description: "Proportion of underdog games won against higher-rated opponents"
+
+  - name: gold_sessions
+    description: "Playing sessions detected by 30-min gap between games, partitioned by time control"
+    columns:
+      - name: session_id
+        description: "Auto-incrementing session identifier per time class"
+      - name: time_class
+        description: "Game speed category for this session"
+      - name: session_start
+        description: "Timestamp of the first game in the session"
+      - name: session_end
+        description: "Timestamp of the last game in the session"
+      - name: games_played
+        description: "Total games played in this session"
+      - name: wins
+        description: "Number of wins in this session"
+      - name: losses
+        description: "Number of losses in this session"
+      - name: draws
+        description: "Number of draws in this session"
+      - name: rating_start
+        description: "Player rating at the first game of the session"
+      - name: rating_end
+        description: "Player rating at the last game of the session"
+      - name: rating_delta
+        description: "Rating change across the session (rating_end minus rating_start)"
 
   - name: gold_time_control_comparison
-    description: "Side-by-side metrics across time controls"
-  
+    description: "Side-by-side performance metrics across time controls"
+    columns:
+      - name: time_class
+        description: "Game speed category"
+      - name: total_games
+        description: "Total games played in this time control"
+      - name: win_rate
+        description: "Overall win rate for this time control (0 to 1)"
+      - name: timeout_loss_rate
+        description: "Proportion of games lost by running out of time"
+      - name: peak_rating
+        description: "Highest rating ever achieved in this time control"
+      - name: current_rating
+        description: "Rating from the most recent game in this time control"
+      - name: most_played_opening
+        description: "Opening family with the most games in this time control"
