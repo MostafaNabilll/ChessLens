@@ -26,3 +26,18 @@ Happy modeling!
 [0m11:22:10.139009 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'end', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x00000235EC635090>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x00000235ED7111B0>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x00000235ED711C90>]}
 [0m11:22:10.141781 [debug] [MainThread]: Flushing usage events
 [0m11:22:10.545750 [debug] [MainThread]: An error was encountered while trying to flush usage events
+[0m13:43:42.358814 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'start', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x000002076EDC5150>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x000002076FEA0EB0>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x000002076FEA0CD0>]}
+
+
+============================== 13:43:42.364413 | 0934debf-332e-406f-b74b-7ce02163fea0 ==============================
+[0m13:43:42.364413 [info ] [MainThread]: Running with dbt=1.11.7
+[0m13:43:42.364413 [debug] [MainThread]: running dbt with arguments {'version_check': 'True', 'no_print': 'None', 'static_parser': 'True', 'target_path': 'None', 'warn_error_options': 'WarnErrorOptionsV2(error=[], warn=[], silence=[])', 'printer_width': '80', 'write_json': 'True', 'introspect': 'True', 'log_cache_events': 'False', 'empty': 'False', 'cache_selected_only': 'False', 'log_format': 'default', 'debug': 'False', 'fail_fast': 'False', 'partial_parse': 'True', 'send_anonymous_usage_stats': 'True', 'quiet': 'False', 'warn_error': 'None', 'profiles_dir': 'C:\\Users\\Mostafa\\.dbt', 'use_colors': 'True', 'invocation_command': 'dbt build -s +gold --full-refresh', 'indirect_selection': 'eager', 'use_experimental_parser': 'False', 'log_path': 'logs'}
+[0m13:43:42.364413 [error] [MainThread]: Encountered an error:
+Runtime Error
+  No dbt_project.yml found at expected path D:\Uni\EPITA\S4\Computer Vision\ChessLens\dbt_project.yml
+  Verify that each entry within packages.yml (and their transitive dependencies) contains a file named dbt_project.yml
+  
+[0m13:43:42.369445 [debug] [MainThread]: Command `dbt build` failed at 13:43:42.369445 after 0.21 seconds
+[0m13:43:42.369445 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'end', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x000002076EDC5150>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x000002076FEA0CD0>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x000002076FEA0F70>]}
+[0m13:43:42.369445 [debug] [MainThread]: Flushing usage events
+[0m13:43:42.793631 [debug] [MainThread]: An error was encountered while trying to flush usage events
