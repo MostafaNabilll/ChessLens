@@ -3,5 +3,5 @@ chesslens:
   outputs:
     dev:
       type: duckdb
-      path: '../data/chesslens.duckdb'
+      path: "{{ env_var('CHESSLENS_DB_PATH', '../data/chesslens.duckdb') }}"
       threads: 4
