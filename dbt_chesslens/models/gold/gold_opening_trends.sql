@@ -34,7 +34,7 @@ SELECT
     avg_opponent_rating,
     prev_month_win_rate,
     CASE
-        WHEN prev_month_win_rate IS NULL THEN 'stable'
+        WHEN prev_month_win_rate IS NULL THEN 'new'
         WHEN win_rate > prev_month_win_rate + 0.05 THEN 'improving'
         WHEN win_rate < prev_month_win_rate - 0.05 THEN 'declining'
         ELSE 'stable'
