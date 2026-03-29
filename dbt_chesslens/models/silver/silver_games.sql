@@ -6,14 +6,14 @@
     )
 }}
 
-{% set username = var('chess_username') %}
 
 WITH base AS (
     SELECT
         game_json,
         game_url,
+        username,
         CASE
-            WHEN json_extract_string(game_json, '$.white.username') = '{{ username }}' THEN 'white'
+            WHEN LOWER(json_extract_string(game_json, '$.white.username')) = LOWER(username) THEN 'white'
             ELSE 'black'
         END AS player_color
     FROM {{ ref('bronze_raw_games') }}
@@ -33,13 +33,18 @@ ratings AS (
         CASE
             WHEN player_color = 'white' THEN json_extract_string(game_json, '$.white.result')
             ELSE json_extract_string(game_json, '$.black.result')
-        END AS raw_result
+        END AS raw_result,
+        CASE
+            WHEN player_color = 'white' THEN json_extract_string(game_json, '$.black.result')
+            ELSE json_extract_string(game_json, '$.white.result')
+        END AS opponent_result_type
     FROM base
 )
 
 
 SELECT
     json_extract_string(game_json, '$.uuid') AS game_id,
+    username,
     to_timestamp(json_extract(game_json, '$.end_time')::BIGINT) AS end_at,
     json_extract_string(game_json, '$.time_control') AS time_control,
     json_extract_string(game_json, '$.time_class') AS time_class,
@@ -53,6 +58,7 @@ SELECT
         ELSE 'loss'
     END AS result,
     raw_result as result_type,
+    opponent_result_type,
     REPLACE(
         REGEXP_EXTRACT(json_extract_string(game_json, '$.eco'), '/openings/(.*)',1),
         '-', ' '

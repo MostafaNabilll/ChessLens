@@ -5,14 +5,20 @@ sys.path.insert(0, str(Path(__file__).parent))
 import streamlit as st
 import plotly.express as px
 import pandas as pd
-from utils import run_query, apply_styles, get_tc_default
+from utils import run_query, apply_styles, get_tc_default, get_username
 
 apply_styles()
 
 st.header("Know Your Opponent")
 st.write("How do you perform against different strength opponents?")
 
-df = run_query("SELECT * FROM main_gold.gold_opponent_analysis")
+username = get_username()
+
+df = run_query(f"SELECT * FROM main_gold.gold_opponent_analysis WHERE username = '{username}'")
+
+if df.empty:
+    st.warning("No data found for this filter.")
+    st.stop()
 
 # Filter
 time_classes = df['time_class'].unique().tolist()

@@ -4,18 +4,13 @@ import streamlit as st
 from pathlib import Path
 
 DB_PATH = str(Path(__file__).parent.parent / "data" / "chesslens.duckdb")
-conn = duckdb.connect(DB_PATH, read_only=True)
 
 def run_query(query: str) -> pd.DataFrame:
-    return conn.execute(query).fetchdf()
+    conn = duckdb.connect(DB_PATH, read_only=True)
+    result = conn.execute(query).fetchdf()
+    conn.close()
+    return result
 
-def get_tc_default(options):
-    if "All" in options:
-        return options.index("All")
-    if "rapid" in options:
-        return options.index("rapid")
-    return 0
-    
 def apply_styles():
     st.markdown("""
         <style>
@@ -34,3 +29,13 @@ def apply_styles():
             }
         </style>
     """, unsafe_allow_html=True)
+
+def get_tc_default(options):
+    if "All" in options:
+        return options.index("All")
+    if "rapid" in options:
+        return options.index("rapid")
+    return 0
+
+def get_username():
+    return st.session_state.get('chess_username', '')

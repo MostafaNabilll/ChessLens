@@ -6,6 +6,7 @@
 }}
 
 SELECT
+    username,
     EXTRACT(HOUR FROM end_at) AS hour_of_day,
     DAYOFWEEK(end_at) AS day_of_week,
     CASE
@@ -20,4 +21,4 @@ SELECT
     AVG(rating_diff) AS avg_rating_delta
 
 FROM {{ ref('silver_games') }}
-GROUP BY 1, 2, 3, 4
+GROUP BY 1, 2, 3, 4, 5

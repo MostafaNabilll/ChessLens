@@ -51,13 +51,14 @@ def get_games_for_month(archive_url: str) -> list[dict]:
     return games
 
 
-def load_to_duckdb(games: list[dict], db_path: str):
+def load_to_duckdb(games: list[dict], db_path: str, username: str):
     """Load raw game JSON into DuckDB, skipping duplicates."""
     conn = duckdb.connect(db_path)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS raw_games (
             game_url TEXT PRIMARY KEY,
-            game_json JSON
+            game_json JSON,
+            username TEXT
         )
     """)
     for game in games:
@@ -66,10 +67,10 @@ def load_to_duckdb(games: list[dict], db_path: str):
             continue
         try:
             conn.execute("""
-                INSERT INTO raw_games (game_url, game_json)
-                VALUES (?, ?)
+                INSERT INTO raw_games (game_url, game_json, username)
+                VALUES (?, ?, ?)
                 ON CONFLICT (game_url) DO NOTHING
-            """, (game_url, json.dumps(game)))
+            """, (game_url, json.dumps(game), username.lower()))
         except Exception as e:
             print(f'Error inserting game {game_url}: {e}')
     conn.close()
@@ -82,7 +83,7 @@ def backfill(username: str):
     for archive_url in archives:
         print(f"Processing archive: {archive_url}")
         games = get_games_for_month(archive_url)
-        load_to_duckdb(games, DB_PATH)
+        load_to_duckdb(games, DB_PATH, username)
     print(f"Backfill complete. Processed {len(archives)} monthly archives.")
 
 
@@ -93,7 +94,7 @@ def incremental(username: str):
     archive_url = f"{BASE_URL}/player/{username}/games/{current_year}/{current_month}"
     print(f"Processing incremental load for {archive_url}")
     games = get_games_for_month(archive_url)
-    load_to_duckdb(games, DB_PATH)
+    load_to_duckdb(games, DB_PATH, username)
     print(f"Incremental load complete. Processed {len(games)} games for {current_year}-{current_month}.")
 
 

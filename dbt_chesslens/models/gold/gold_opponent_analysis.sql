@@ -20,6 +20,7 @@ WITH games_with_bucket AS (
 )
 
 SELECT
+    username,
     time_class,
     rating_bucket,
     COUNT(*) AS games_played,
@@ -29,4 +30,4 @@ SELECT
     AVG(CASE WHEN result = 'win' AND expected_win_rate < 0.5 THEN 1.0 ELSE 0 END) AS upset_rate
 
 FROM games_with_bucket
-GROUP BY 1, 2
+GROUP BY 1, 2, 3

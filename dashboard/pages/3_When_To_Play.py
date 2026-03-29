@@ -5,14 +5,20 @@ sys.path.insert(0, str(Path(__file__).parent))
 import streamlit as st
 import plotly.express as px
 import pandas as pd
-from utils import run_query, apply_styles, get_tc_default
+from utils import run_query, apply_styles, get_tc_default, get_username
 
 apply_styles()
 
 st.header("When To Play")
 st.write("Discover when you play your best chess based on time of day and day of week.")
 
-df = run_query("SELECT * FROM main_gold.gold_time_of_day")
+username = get_username()
+
+df = run_query(f"SELECT * FROM main_gold.gold_time_of_day WHERE username = '{username}'")
+
+if df.empty:
+    st.warning("No data found for this filter.")
+    st.stop()
 
 # Time class filter
 time_classes = df['time_class'].unique().tolist()

@@ -5,14 +5,20 @@ sys.path.insert(0, str(Path(__file__).parent))
 import streamlit as st
 import plotly.express as px
 import pandas as pd
-from utils import run_query, apply_styles, get_tc_default
+from utils import run_query, apply_styles, get_tc_default, get_username
 
 apply_styles()
 
 st.header("Session Insights")
 st.write("How does session length affect your performance? Should you stop after a few games or keep grinding?")
 
-df = run_query("SELECT * FROM main_gold.gold_sessions")
+username = get_username()
+
+df = run_query(f"SELECT * FROM main_gold.gold_sessions WHERE username = '{username}'")
+
+if df.empty:
+    st.warning("No data found for this filter.")
+    st.stop()
 
 # Filter
 time_classes = df['time_class'].unique().tolist()

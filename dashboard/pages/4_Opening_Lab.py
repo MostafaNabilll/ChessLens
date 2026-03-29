@@ -5,14 +5,20 @@ sys.path.insert(0, str(Path(__file__).parent))
 import streamlit as st
 import plotly.express as px
 import pandas as pd
-from utils import run_query, apply_styles, get_tc_default
+from utils import run_query, apply_styles, get_tc_default, get_username
 
 apply_styles()
 
 st.header("Opening Lab")
 st.write("Track how your openings perform over time and spot what's improving or declining.")
 
-df = run_query("SELECT * FROM main_gold.gold_opening_trends")
+username = get_username()
+
+df = run_query(f"SELECT * FROM main_gold.gold_opening_trends WHERE username = '{username}'")
+
+if df.empty:
+    st.warning("No data found for this filter.")
+    st.stop()
 
 # Filters
 col1, col2 = st.columns(2)

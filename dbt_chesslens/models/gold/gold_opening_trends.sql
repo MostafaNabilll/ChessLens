@@ -7,6 +7,7 @@
 
 WITH monthly_stats AS (
     SELECT
+        username,
         opening_family,
         time_class,
         date_trunc('month', end_at) AS month,
@@ -14,18 +15,19 @@ WITH monthly_stats AS (
         AVG(CASE WHEN result = 'win' THEN 1 ELSE 0 END) AS win_rate,
         AVG(opponent_rating) AS avg_opponent_rating
     FROM {{ ref('silver_games') }}
-    GROUP BY 1, 2, 3
+    GROUP BY 1, 2, 3, 4
     HAVING COUNT(*) >= 5
 ),
 
 with_trends AS (
     SELECT
         *,
-        LAG(win_rate) OVER (PARTITION BY opening_family, time_class ORDER BY month) AS prev_month_win_rate
+        LAG(win_rate) OVER (PARTITION BY username, opening_family, time_class ORDER BY month) AS prev_month_win_rate
     FROM monthly_stats
 )
 
 SELECT
+    username,
     opening_family,
     time_class,
     month,

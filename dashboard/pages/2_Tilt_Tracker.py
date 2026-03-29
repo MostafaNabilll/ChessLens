@@ -5,21 +5,29 @@ sys.path.insert(0, str(Path(__file__).parent))
 import streamlit as st
 import plotly.express as px
 import pandas as pd
-from utils import run_query, apply_styles, get_tc_default
+from utils import run_query, apply_styles, get_tc_default, get_username
 
 apply_styles()
 
 st.header("Tilt Tracker")
 st.write("Does losing make you lose more? This page tracks how consecutive losses affect your next game.")
 
-df1 = run_query ("""
+username = get_username()
+
+df1 = run_query(f"""
     SELECT
     is_tilted,
     COUNT(*) AS games,
     AVG(CASE WHEN result ='win' THEN 1 ELSE 0 END) as win_rate
     FROM main_gold.gold_tilt_analysis
+    WHERE username = '{username}'
     GROUP BY 1
 """)
+
+if df1.empty:
+    st.warning("No data found for this filter.")
+    st.stop()
+
 cols = st.columns(len(df1))
 for i, row in df1.iterrows():
     with cols[i]:

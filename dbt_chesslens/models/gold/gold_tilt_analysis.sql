@@ -7,6 +7,7 @@
 
 WITH ordered_games AS (
     SELECT
+        username,
         game_id,
         end_at,
         result,
@@ -17,7 +18,7 @@ WITH ordered_games AS (
         result_type,
         -- This creates a new group number every time you win or draw
         SUM(CASE WHEN result != 'loss' THEN 1 ELSE 0 END) 
-            OVER (ORDER BY end_at) AS loss_group
+            OVER (PARTITION BY username ORDER BY end_at) AS loss_group
     FROM {{ ref('silver_games') }}
 ),
 
@@ -27,7 +28,7 @@ streaks AS (
         *,
         CASE 
             WHEN result = 'loss' THEN 
-                ROW_NUMBER() OVER (PARTITION BY loss_group ORDER BY end_at) - 1
+                ROW_NUMBER() OVER (PARTITION BY username, loss_group ORDER BY end_at) - 1
             ELSE 0
         END AS loss_streak
     FROM ordered_games
@@ -37,11 +38,12 @@ streaks AS (
 with_prior_streak AS (
     SELECT
         *,
-        LAG(loss_streak, 1, 0) OVER (ORDER BY end_at) AS consecutive_losses_before
+        LAG(loss_streak, 1, 0) OVER (PARTITION BY username ORDER BY end_at) AS consecutive_losses_before
     FROM streaks
 )
 
 SELECT
+    username,
     game_id,
     end_at,
     time_class,
