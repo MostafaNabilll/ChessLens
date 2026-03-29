@@ -5,7 +5,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 import streamlit as st
 import plotly.express as px
 import pandas as pd
-from utils import run_query, apply_styles, get_tc_default, get_username
+from utils import run_query, apply_styles, get_tc_default, get_username, style_chart
 
 apply_styles()
 

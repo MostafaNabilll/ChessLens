@@ -41,6 +41,3 @@ models:
     gold: 
       +materialized: table
       +schema: gold
-
-vars:
-  chess_username: "Maxime-ana"

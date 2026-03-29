@@ -5,7 +5,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 import streamlit as st
 import plotly.express as px
 import pandas as pd
-from utils import run_query, apply_styles, get_tc_default, get_username
+from utils import run_query, apply_styles, get_tc_default, get_username, style_chart
 
 apply_styles()
 
@@ -40,16 +40,7 @@ fig = px.bar(df, x='rating_bucket', y='win_rate',
             color_continuous_scale='RdYlGn',
             labels={'rating_bucket': 'Opponent Strength', 'win_rate': 'Win Rate'})
 fig.update_traces(textposition='outside', marker_line_width=0)
-fig.update_layout(
-    yaxis_tickformat='.0%',
-    plot_bgcolor='rgba(0,0,0,0)',
-    paper_bgcolor='rgba(0,0,0,0)',
-    height=450,
-    coloraxis_showscale=False,
-    yaxis=dict(gridcolor='rgba(128,128,128,0.2)'),
-    margin=dict(t=30, b=50),
-    font=dict(size=13)
-)
+style_chart(fig, height=450, y_tickformat='.0%')
 st.plotly_chart(fig, width='stretch')
 
 st.divider()

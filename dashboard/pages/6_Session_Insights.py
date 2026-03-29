@@ -5,7 +5,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 import streamlit as st
 import plotly.express as px
 import pandas as pd
-from utils import run_query, apply_styles, get_tc_default, get_username
+from utils import run_query, apply_styles, get_tc_default, get_username, style_chart
 
 apply_styles()
 
@@ -62,16 +62,7 @@ fig = px.bar(session_stats, x='length_bucket', y='avg_win_rate',
             color_continuous_scale='RdYlGn',
             labels={'length_bucket': 'Games per Session', 'avg_win_rate': 'Avg Win Rate'})
 fig.update_traces(textposition='outside', marker_line_width=0)
-fig.update_layout(
-    yaxis_tickformat='.0%',
-    plot_bgcolor='rgba(0,0,0,0)',
-    paper_bgcolor='rgba(0,0,0,0)',
-    height=400,
-    coloraxis_showscale=False,
-    yaxis=dict(gridcolor='rgba(128,128,128,0.2)'),
-    margin=dict(t=30, b=50),
-    font=dict(size=13)
-)
+style_chart(fig, y_tickformat='.0%')
 st.plotly_chart(fig, width='stretch')
 
 st.divider()
@@ -84,15 +75,7 @@ fig2 = px.bar(session_stats, x='length_bucket', y='avg_rating_delta',
             color_discrete_map={'positive': '#2ecc71', 'negative': '#e74c3c'},
             labels={'length_bucket': 'Games per Session', 'avg_rating_delta': 'Avg Rating Change'})
 fig2.update_traces(textposition='outside', marker_line_width=0)
-fig2.update_layout(
-    plot_bgcolor='rgba(0,0,0,0)',
-    paper_bgcolor='rgba(0,0,0,0)',
-    height=400,
-    showlegend=False,
-    yaxis=dict(gridcolor='rgba(128,128,128,0.2)'),
-    margin=dict(t=30, b=50),
-    font=dict(size=13)
-)
+style_chart(fig2, showlegend=False)
 st.plotly_chart(fig2, width='stretch')
 
 # Takeaway

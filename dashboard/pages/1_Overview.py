@@ -5,7 +5,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 import streamlit as st
 import plotly.express as px
 import pandas as pd
-from utils import run_query, apply_styles, get_tc_default, get_username
+from utils import run_query, apply_styles, get_tc_default, get_username, style_chart
 
 apply_styles()
 
@@ -124,14 +124,7 @@ if time_classes_list:
     if not df_rating.empty:
         fig = px.line(df_rating, x='end_at', y='player_rating',
                     labels={'end_at': 'Date', 'player_rating': 'Rating'})
-        fig.update_layout(
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            height=400,
-            yaxis=dict(gridcolor='rgba(128,128,128,0.2)'),
-            margin=dict(t=30, b=50),
-            font=dict(size=13)
-        )
+        style_chart(fig)
         st.plotly_chart(fig, width='stretch')
 
 st.divider()
@@ -143,15 +136,7 @@ fig = px.bar(df, x='time_class', y='total_games',
             labels={'time_class': 'Time Control', 'total_games': 'Games Played'},
             color_discrete_sequence=['#4C78A8'])  
 fig.update_traces(textposition='outside', marker_line_width=0)
-fig.update_layout(
-    plot_bgcolor='rgba(0,0,0,0)',
-    paper_bgcolor='rgba(0,0,0,0)',
-    height=400,
-    coloraxis_showscale=False,
-    yaxis=dict(gridcolor='rgba(128,128,128,0.2)'),
-    margin=dict(t=30, b=50),
-    font=dict(size=13)
-)
+style_chart(fig)
 st.plotly_chart(fig, use_container_width=True)
 
 # Timeout rate comparison
@@ -161,13 +146,5 @@ fig2 = px.bar(df, x='time_class', y='timeout_loss_rate',
             labels={'time_class': 'Time Control', 'timeout_loss_rate': 'Timeout Loss Rate'},
             color_discrete_sequence=['#ff6b6b'])
 fig2.update_traces(textposition='outside')
-fig2.update_layout(
-    plot_bgcolor='rgba(0,0,0,0)',
-    paper_bgcolor='rgba(0,0,0,0)',
-    height=350,
-    yaxis_tickformat='.0%',
-    yaxis=dict(gridcolor='rgba(128,128,128,0.2)'),
-    margin=dict(t=30, b=50),
-    font=dict(size=13)
-)
+style_chart(fig2, height=350, y_tickformat='.0%')
 st.plotly_chart(fig2, use_container_width=True)

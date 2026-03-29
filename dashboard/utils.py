@@ -11,6 +11,22 @@ def run_query(query: str) -> pd.DataFrame:
     conn.close()
     return result
 
+def style_chart(fig, height=400, y_tickformat=None, showlegend=True):
+    layout = dict(
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        height=height,
+        yaxis=dict(gridcolor='rgba(128,128,128,0.2)'),
+        margin=dict(t=30, b=50),
+        font=dict(size=13),
+        showlegend=showlegend,
+        coloraxis_showscale=False,
+    )
+    if y_tickformat:
+        layout['yaxis_tickformat'] = y_tickformat
+    fig.update_layout(**layout)
+    return fig
+
 def apply_styles():
     st.markdown("""
         <style>

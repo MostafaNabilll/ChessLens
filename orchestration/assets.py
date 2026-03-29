@@ -3,7 +3,6 @@ from dagster_dbt import DbtCliResource, dbt_assets
 from pathlib import Path
 import os
 import sys
-import json
 
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -23,8 +22,7 @@ def raw_games():
 
 @dbt_assets(manifest=DBT_MANIFEST_PATH)
 def chesslens_dbt_assets(context: AssetExecutionContext, dbt: DbtCliResource):
-    username = os.getenv("CHESS_USERNAME")
     yield from dbt.cli(
-        ["build", "--vars", json.dumps({"chess_username": username})],
+        ["build"],
         context=context
     ).stream()

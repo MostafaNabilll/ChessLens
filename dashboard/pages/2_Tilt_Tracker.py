@@ -4,8 +4,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 import streamlit as st
 import plotly.express as px
-import pandas as pd
-from utils import run_query, apply_styles, get_tc_default, get_username
+from utils import run_query, apply_styles, get_username, style_chart
 
 apply_styles()
 
@@ -43,12 +42,13 @@ st.divider()
 st.subheader("Win Rate by Loss Streak")
 st.write("Each bar shows your win rate after N consecutive losses. Does your performance drop?")
 
-df2 = run_query("""
+df2 = run_query(f"""
 SELECT
     consecutive_losses_before,
     COUNT(*) AS games,
     AVG(CASE WHEN result = 'win' THEN 1 ELSE 0 END) AS win_rate
 FROM main_gold.gold_tilt_analysis
+WHERE username = '{username}'
 GROUP BY 1
 ORDER BY 1
 """)
@@ -64,18 +64,9 @@ fig.update_traces(
     marker_line_width=0
 )
 
-fig.update_layout(
-    yaxis_tickformat='.0%',
-    plot_bgcolor='rgba(0,0,0,0)',
-    paper_bgcolor='rgba(0,0,0,0)',
-    height=450,
-    showlegend=False,
-    coloraxis_showscale=False,
-    xaxis=dict(dtick=1, title_font_size=14),
-    yaxis=dict(title_font_size=14, gridcolor='rgba(128,128,128,0.2)'),
-    margin=dict(t=30, b=50),
-    font=dict(size=13)
-)
+style_chart(fig, height=450, y_tickformat='.0%', showlegend=False)
+fig.update_layout(xaxis=dict(dtick=1))
+
 
 st.plotly_chart(fig, use_container_width=True)
 tilted_wr = df1[df1['is_tilted'] == True]['win_rate'].values

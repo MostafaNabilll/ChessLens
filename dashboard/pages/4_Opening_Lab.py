@@ -5,7 +5,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 import streamlit as st
 import plotly.express as px
 import pandas as pd
-from utils import run_query, apply_styles, get_tc_default, get_username
+from utils import run_query, apply_styles, get_tc_default, get_username, style_chart
 
 apply_styles()
 
@@ -52,16 +52,8 @@ if not df_top.empty:
     fig = px.line(df_top, x='month', y='win_rate', color='opening_family',
                 markers=True,
                 labels={'month': 'Month', 'win_rate': 'Win Rate', 'opening_family': 'Opening'})
-    fig.update_layout(
-        yaxis_tickformat='.0%',
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        height=450,
-        yaxis=dict(gridcolor='rgba(128,128,128,0.2)'),
-        margin=dict(t=30, b=50),
-        font=dict(size=13),
-        legend=dict(orientation='h', yanchor='bottom', y=-0.3)
-    )
+    style_chart(fig, height=450, y_tickformat='.0%')
+    fig.update_layout(legend=dict(orientation='h', yanchor='bottom', y=-0.3))
     st.plotly_chart(fig, use_container_width=True)
 else:
     st.info("No data for the selected filters.")
