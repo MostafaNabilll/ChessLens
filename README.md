@@ -1,8 +1,6 @@
 # ChessLens
 
-A personal chess analytics platform that reveals patterns chess.com doesn't show you.
-
-Built end-to-end: API ingestion, medallion architecture transformations, orchestration, and an interactive dashboard.
+A chess analytics platform that pulls games from chess.com and reveals patterns the platform doesn't show you. Any chess.com player can enter their username and get a full analysis.
 
 ![Dashboard Overview](docs/dashboard_overview.png)
 
@@ -10,70 +8,71 @@ Built end-to-end: API ingestion, medallion architecture transformations, orchest
 
 ## What It Does
 
-Chess.com gives you basic stats. ChessLens goes deeper:
+Chess.com tells you your win rate and shows a rating graph. ChessLens answers the questions that actually matter:
 
-- **Tilt Analysis** - tracks how consecutive losses affect your next game
-- **Time-of-Day Patterns** - heatmap of when you play your best chess
-- **Session Insights** - how session length impacts your rating
-- **Opening Trends** - monthly win rate trends with improving/declining detection
-- **Opponent Analysis** - performance by opponent strength with upset tracking
-- **Time Control Comparison** - side-by-side metrics across bullet, blitz, rapid
+- **Am I tilting?** Tracks how consecutive losses affect your next game
+- **When should I play?** Heatmap of win rate by hour and day of week
+- **When should I stop?** How session length impacts your rating
+- **Which openings are working?** Monthly trends with improving/declining detection
+- **Who do I struggle against?** Performance by opponent rating range
+- **What's my best format?** Side-by-side comparison across bullet, blitz, rapid
+- **Game Replay** Step through any game move by move with time spent per move
+- **Stockfish Analysis** On-demand engine evaluation with accuracy score, blunder/mistake/inaccuracy detection, and eval bar
+
+## Multi-User Support
+
+Enter any chess.com username. If it's a new user, ChessLens pulls all their games, runs the transformation pipeline, and builds their dashboard automatically. Returning users can refresh their data from the sidebar.
 
 ## Sample Findings (from 1,379 games)
 
 - **No tilt detected.** Win rate after 3+ consecutive losses: 59.5%. Normal win rate: 50.4%. Losing streaks apparently make me focus harder.
-- **Night chess is bad.** Monday night blitz: 14.3% win rate. Tuesday night blitz: 20%. The data says close the laptop after midnight.
-- **Scotch Game is improving.** Rapid win rate went from 44% in January to 61% in March. The study is paying off.
-- **18% of bullet games lost on time.** Nearly one in five. Bullet might not be my format.
+- **Night chess is bad.** Monday night blitz: 14.3% win rate. Tuesday night blitz: 20%. Close the laptop after midnight.
+- **Scotch Game is improving.** Rapid win rate went from 44% in January to 61% in March.
+- **18% of bullet games lost on time.** Nearly one in five.
 - **6-10 game sessions are the sweet spot.** Shorter sessions average -0.9 rating. 6-10 game sessions average +7.1.
-- **14-game win streak.** Didn't know about this until the data surfaced it.
-- **White slightly better.** 51.5% win rate as white vs 48.8% as black.
+- **14-game win streak.** Had no idea until I ran the query.
+- **51.5% as white, 48.8% as black.** Small gap, consistent with first-move advantage.
 
-## Architecture
+## How It Works
+
+Games come in from the chess.com public API through a Python ingestion script that handles both full backfill and incremental loading. Raw JSON lands in DuckDB, then dbt transforms it through three layers: bronze (raw), silver (cleaned and typed), gold (analytics). Dagster orchestrates the pipeline with a daily schedule. Streamlit serves the dashboard. Stockfish evaluates individual games on demand from the replay page.
 
 ```
-chess.com API → Python ingestion → DuckDB (bronze)
-                                      ↓
-                                  dbt-core (silver)
-                                      ↓
-                                  dbt-core (gold)
-                                      ↓
-                                  Streamlit dashboard
-
-Dagster orchestrates the full pipeline on a daily schedule.
+chess.com API --> Python --> DuckDB (bronze) --> dbt (silver) --> dbt (gold) --> Streamlit
+                                                                                    |
+                                                                              Stockfish (on-demand)
+                                                     |
+                                               Dagster orchestrates
 ```
-
-### dbt Lineage
 
 ![dbt Lineage](docs/dbt_lineage.png)
-
-### Dagster Pipeline
 
 ![Dagster Run](docs/dagster_run.png)
 
 ## Stack
 
-| Layer          | Tool              | Why                                                    |
-|----------------|-------------------|--------------------------------------------------------|
-| Ingestion      | Python + requests | Direct API calls with rate limiting and backfill logic |
-| Storage        | DuckDB            | Local analytical database, fits in memory              |
-| Transformation | dbt-core          | Medallion architecture with tests and documentation    |
-| Orchestration  | Dagster           | Asset-based DAG with dbt integration and scheduling    |
-| Dashboard      | Streamlit + Plotly| Interactive filters, heatmaps, and trend charts        |
+| Layer          | Tool              | Why                                                |
+|----------------|-------------------|----------------------------------------------------|
+| Ingestion      | Python + requests | Direct API calls with rate limiting and backfill   |
+| Storage        | DuckDB            | Fits in memory, no server to manage                |
+| Transformation | dbt-core          | Medallion architecture with 18 tests               |
+| Orchestration  | Dagster           | Asset-based DAG with built-in dbt integration      |
+| Dashboard      | Streamlit + Plotly | 7 pages with filters, charts, and game replay     |
+| Engine         | Stockfish         | Position evaluation, accuracy scoring, move classification |
 
 ## Data Model
 
 ![ERD](docs/erd.png)
 
 ### Bronze
-Raw JSON from the chess.com API stored as-is. Source of truth.
+Raw JSON from the chess.com API. No transformations. Source of truth.
 
 ### Silver
-Parsed, typed, deduplicated game records. Player perspective applied (ratings, results, openings). Incremental materialization.
+Parsed game records with player perspective applied. Determines which side the player was on, extracts ratings, results, openings, and PGN. Incremental materialization. Multi-user via username column.
 
 ### Gold
 
-| Model                        | What It Answers                                          |
+| Model                        | Question                                                 |
 |------------------------------|----------------------------------------------------------|
 | `gold_tilt_analysis`         | Does losing make me lose more?                           |
 | `gold_time_of_day`           | When am I sharpest?                                      |
@@ -82,11 +81,14 @@ Parsed, typed, deduplicated game records. Player perspective applied (ratings, r
 | `gold_opponent_analysis`     | How do I perform against stronger vs weaker opponents?   |
 | `gold_time_control_comparison`| Am I better at blitz or rapid?                          |
 
+### Evaluation Cache
+Stockfish results stored in `game_evaluations` table. Populated on demand from the replay page. Not managed by dbt since it's written by the dashboard directly.
+
 ## Setup
 
 ### Prerequisites
 - Python 3.10+
-- A chess.com account with game history
+- Stockfish binary (download from [stockfishchess.org](https://stockfishchess.org/download))
 
 ### Installation
 
@@ -100,6 +102,16 @@ source venv/bin/activate  # Windows: .\venv\Scripts\Activate
 pip install -r requirements.txt
 ```
 
+### Stockfish Setup
+
+Download Stockfish and place the binary in the `bin/` directory:
+
+```
+chesslens/
+├── bin/
+│   └── stockfish.exe    # or stockfish on Linux/Mac
+```
+
 ### Configuration
 
 Create a `.env` file in the project root:
@@ -109,28 +121,26 @@ CHESS_USERNAME=your_chess_com_username
 CHESSLENS_DB_PATH=full/path/to/chesslens/data/chesslens.duckdb
 ```
 
-Update the chess username in `dbt_chesslens/dbt_project.yml`:
+### Run the Dashboard
 
-```yaml
-vars:
-  chess_username: 'your_chess_com_username'
+```bash
+cd dashboard
+streamlit run app.py
 ```
 
-### Run the Pipeline
+Enter any chess.com username. The pipeline runs automatically for new users.
+
+### Run the Pipeline Manually
 
 ```bash
 # Backfill all historical games
-python ingestion/extract.py --backfill
+python ingestion/extract.py --backfill --username your_username
 
 # Run dbt transformations
 cd dbt_chesslens
-dbt build
-cd ..
+dbt build --full-refresh
 
-# Launch the dashboard
-streamlit run dashboard/app.py
-
-# Or use Dagster to orchestrate everything
+# Or use Dagster to orchestrate
 dagster dev -m orchestration.definitions
 ```
 
@@ -139,22 +149,40 @@ dagster dev -m orchestration.definitions
 ```
 chesslens/
 ├── ingestion/
-│   └── extract.py              # Chess.com API ingestion with backfill and incremental
+│   └── extract.py                  # Chess.com API ingestion (backfill + incremental)
 ├── dbt_chesslens/
 │   ├── models/
-│   │   ├── bronze/             # Raw data, no transformations
-│   │   ├── silver/             # Cleaned, typed, deduplicated
-│   │   └── gold/               # Analytics-ready aggregations
-│   ├── models/schema.yml       # Column docs and tests
+│   │   ├── bronze/
+│   │   │   └── bronze_raw_games.sql
+│   │   ├── silver/
+│   │   │   └── silver_games.sql
+│   │   └── gold/
+│   │       ├── gold_tilt_analysis.sql
+│   │       ├── gold_time_of_day.sql
+│   │       ├── gold_opening_trends.sql
+│   │       ├── gold_opponent_analysis.sql
+│   │       ├── gold_sessions.sql
+│   │       └── gold_time_control_comparison.sql
+│   ├── models/schema.yml           # Column docs and 18 tests
 │   ├── dbt_project.yml
 │   └── profiles.yml
 ├── orchestration/
-│   ├── assets.py               # Dagster assets (ingestion + dbt)
-│   └── definitions.py          # Job, schedule, and resource config
+│   ├── assets.py                   # Dagster assets (ingestion + dbt)
+│   └── definitions.py              # Job, schedule, and resource config
 ├── dashboard/
-│   └── app.py                  # Streamlit app with 6 analytics pages
-├── data/                       # DuckDB database (gitignored)
-├── docs/                       # Screenshots and documentation
+│   ├── app.py                      # Username input, page routing, pipeline trigger
+│   ├── utils.py                    # DB connection, Stockfish evaluation, shared helpers
+│   └── pages/
+│       ├── 1_Overview.py           # Rating cards, streaks, rating progression, win rate by color
+│       ├── 2_Tilt_Tracker.py       # Consecutive loss impact analysis
+│       ├── 3_When_To_Play.py       # Time-of-day heatmap
+│       ├── 4_Opening_Lab.py        # Monthly opening trends
+│       ├── 5_Know_Your_Opponent.py # Performance by opponent strength
+│       ├── 6_Session_Insights.py   # Session length analysis
+│       └── 7_Game_Replay.py        # Move-by-move replay with Stockfish analysis
+├── bin/                            # Stockfish binary (gitignored)
+├── data/                           # DuckDB database (gitignored)
+├── docs/                           # Screenshots and lineage graphs
 ├── .env.example
 ├── requirements.txt
 └── README.md
@@ -162,22 +190,18 @@ chesslens/
 
 ## Key Design Decisions
 
-**DuckDB over Spark** - 1,300 games fit in memory. Using distributed computing here would be overengineering.
+**DuckDB over Spark** - 1,300 games fit in memory. Spark would be overengineering.
 
-**Dagster over Airflow** - The asset model maps to the medallion pattern. Built-in dbt integration. Local dev without Docker.
+**Dagster over Airflow** - Asset model maps to medallion layers. Built-in dbt integration. No Docker needed for local dev.
 
-**Incremental silver, full-refresh gold** - Silver appends new games. Gold models are aggregations over all data, so they rebuild fully each run.
+**Incremental silver, full-refresh gold** - Silver appends new games without rebuilding. Gold models aggregate across all data so they rebuild each run.
 
-**Player perspective in silver** - Chess.com returns data for both sides. Silver figures out which side is the player once in a CTE. Everything downstream uses the clean columns.
+**On-demand Stockfish over batch** - Evaluating all games upfront would take hours. Instead, users trigger analysis per game from the replay page. Results are cached so each game is only evaluated once.
+
+**Single DuckDB with username column** - Multi-user data stored in one database with username partitioning in every model. Matches how production data platforms work.
 
 ## Roadmap
 
-- **Multi-user support** - username input on the dashboard triggers ingestion and transformation for any chess.com player
-- **Game replay viewer** - interactive move-by-move replay with board visualization, powered by PGN data
-- **PGN parsing** - extract move count, game duration, and time-per-move analysis
-- **Win rate by color** - performance comparison as white vs black
-- **Deployed dashboard** - Streamlit Cloud deployment for public access
+- **Accuracy calibration** - fine-tuning the accuracy formula to better match chess.com's CAPS2 scoring
 
-## License
-
-MIT
+- **Fine-tuned chess coaching model** - Train on top player data to generate personalized recommendations
