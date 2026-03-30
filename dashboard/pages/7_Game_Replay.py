@@ -7,7 +7,7 @@ import chess
 import chess.svg
 import chess.pgn
 import io
-from utils import run_query, apply_styles, get_tc_default, get_username
+from utils import run_query, apply_styles, get_tc_default, get_username, evaluate_game, get_cached_eval, calculate_accuracy
 
 apply_styles()
 
@@ -32,7 +32,7 @@ query = f"""
 """
 if result_filter != "All":
     query += f" AND result = '{result_filter}'"
-query += " ORDER BY end_at DESC LIMIT 50"
+query += " ORDER BY end_at DESC LIMIT 100"
 
 df = run_query(query)
 
@@ -138,6 +138,90 @@ else:
             if st.session_state.move_pos > total_moves:
                 st.session_state.move_pos = total_moves
             
+            # Check if analysis exists
+            game_id = selected_game['game_id']
+            cached_eval = get_cached_eval(game_id)
+            has_eval = not cached_eval.empty
+            
+            # Analyze button
+            if not has_eval:
+                if st.button("Analyze with Stockfish", use_container_width=True):
+                    progress_bar = st.progress(0, text="Analyzing positions...")
+                    
+                    def update_progress(pct):
+                        progress_bar.progress(pct, text=f"Analyzing... {int(pct * 100)}%")
+                    
+                    cached_eval = evaluate_game(pgn_text, game_id, progress_callback=update_progress)
+                    has_eval = not cached_eval.empty
+                    progress_bar.empty()
+                    st.rerun()
+            
+            # Show accuracy summary if analysis exists
+            if has_eval:
+                player_color = selected_game['player_color']
+                
+                white_moves = cached_eval[cached_eval['move_number'] % 2 == 1]
+                black_moves = cached_eval[cached_eval['move_number'] % 2 == 0]
+                
+                white_avg_ep = white_moves['centipawn_loss'].mean() / 1000
+                black_avg_ep = black_moves['centipawn_loss'].mean() / 1000
+                
+                white_acc = calculate_accuracy(white_avg_ep)
+                black_acc = calculate_accuracy(black_avg_ep)
+                
+                if player_color == 'white':
+                    player_moves = white_moves
+                    player_acc = white_acc
+                    opponent_acc = black_acc
+                else:
+                    player_moves = black_moves
+                    player_acc = black_acc
+                    opponent_acc = white_acc
+                
+                blunders = len(player_moves[player_moves['classification'] == 'blunder'])
+                mistakes = len(player_moves[player_moves['classification'] == 'mistake'])
+                inaccuracies = len(player_moves[player_moves['classification'] == 'inaccuracy'])
+                good_moves = len(player_moves[player_moves['classification'] == 'good'])
+                excellent_moves = len(player_moves[player_moves['classification'] == 'excellent'])
+                best_moves = len(player_moves[player_moves['classification'] == 'best'])
+                
+                if player_acc >= 90:
+                    p_color = "#2ecc71"
+                elif player_acc >= 70:
+                    p_color = "#f39c12"
+                else:
+                    p_color = "#e74c3c"
+                
+                if opponent_acc >= 90:
+                    o_color = "#2ecc71"
+                elif opponent_acc >= 70:
+                    o_color = "#f39c12"
+                else:
+                    o_color = "#e74c3c"
+                
+                st.markdown(f"""
+                    <div style="
+                        background: rgba(128,128,128,0.1); 
+                        border-radius: 8px; 
+                        padding: 8px 15px; 
+                        display: flex; 
+                        justify-content: space-around;
+                        align-items: center;
+                        margin: 0 0 10px 0;
+                        font-size: 13px;
+                    ">
+                        <span>You: <strong style="color:{p_color}; font-size:16px;">{player_acc:.1f}%</strong></span>
+                        <span>Opponent: <strong style="color:{o_color}; font-size:16px;">{opponent_acc:.1f}%</strong></span>
+                        <span>|</span>
+                        <span style="color:#2ecc71;">Best: {best_moves}</span>
+                        <span style="color:#66bb6a;">Excellent: {excellent_moves}</span>
+                        <span style="color:#8bc34a;">Good: {good_moves}</span>
+                        <span style="color:#f39c12;">Inaccuracy: {inaccuracies}</span>
+                        <span style="color:#ff9800;">Mistake: {mistakes}</span>
+                        <span style="color:#e74c3c;">Blunder: {blunders}</span>
+                    </div>
+                """, unsafe_allow_html=True)
+            
             # Board and moves side by side
             board_col, moves_col = st.columns([1, 1])
             
@@ -153,12 +237,37 @@ else:
                     lastmove=last_move,
                     size=570
                 )
-                st.markdown(f'<div style="display:flex;justify-content:center;">{svg}</div>', unsafe_allow_html=True)
+                
+                # Eval bar next to board if analysis exists
+                if has_eval and move_num > 0:
+                    eval_row = cached_eval[cached_eval['move_number'] == move_num].iloc[0]
+                    eval_score = eval_row['eval_after']
+                    
+                    # Clamp eval for display
+                    clamped = max(-1000, min(1000, eval_score))
+                    white_pct = 50 + (clamped / 20)
+                    white_pct = max(5, min(95, white_pct))
+                    black_pct = 100 - white_pct
+                    
+                    eval_display = f"+{eval_score / 100:.1f}" if eval_score >= 0 else f"{eval_score / 100:.1f}"
+                    
+                    eval_bar_html = f"""
+                    <div style="display:flex; gap:10px; align-items:stretch; justify-content:center;">
+                        <div style="width:25px; height:500px; border-radius:4px; overflow:hidden; display:flex; flex-direction:column; border:1px solid rgba(128,128,128,0.3);">
+                            <div style="background:#333; height:{black_pct}%; transition:height 0.3s;"></div>
+                            <div style="background:#eee; height:{white_pct}%; transition:height 0.3s;"></div>
+                        </div>
+                        <div>{svg}</div>
+                    </div>
+                    <div style="text-align:center; margin-top:5px; font-weight:bold; font-size:14px; color:gray;">{eval_display}</div>
+                    """
+                    st.markdown(eval_bar_html, unsafe_allow_html=True)
+                else:
+                    st.markdown(f'<div style="display:flex;justify-content:center;">{svg}</div>', unsafe_allow_html=True)
                 
                 # Spacing between board and buttons
                 st.markdown("<div style='height: 20px'></div>", unsafe_allow_html=True)
                 
-                # Styled navigation buttons
                 st.markdown("""
                     <style>
                         .replay-nav button {
@@ -188,7 +297,17 @@ else:
                         st.session_state.move_pos = total_moves
             
             with moves_col:
-                # Two-column move list with time spent
+                # Classification colors for dots
+                CLASS_COLORS = {
+                    'best': '#2ecc71',
+                    'excellent': '#66bb6a',
+                    'good': '#8bc34a', 
+                    'inaccuracy': '#f39c12',
+                    'mistake': '#ff9800',
+                    'blunder': '#e74c3c'
+                }
+                
+                # Two-column move list with time spent and eval colors
                 half = (len(move_texts) + 3) // 4 * 2
                 
                 move_html = '<div style="display:flex; gap:15px; max-height:500px; overflow-y:auto;">'
@@ -207,6 +326,14 @@ else:
                             # White move
                             white_san = move_texts[i]['san']
                             white_time = move_texts[i]['time_spent']
+                            
+                            w_dot = ""
+                            if has_eval and i < len(cached_eval):
+                                w_class = cached_eval.iloc[i]['classification']
+                                w_color = CLASS_COLORS.get(w_class, '')
+                                if w_class in ('inaccuracy', 'mistake', 'blunder'):
+                                    w_dot = f'<span style="color:{w_color}; font-size:8px;">&#9679;</span> '
+                            
                             if i == move_num - 1:
                                 w_style = "background:rgba(76,120,168,0.3); padding:1px 4px; border-radius:3px; font-weight:bold;"
                             else:
@@ -215,19 +342,27 @@ else:
                             time_tag = f'<span style="color:gray; font-size:10px;"> {white_time}</span>' if white_time else ''
                             
                             line = f'<span style="color:gray;">{move_number}.</span> '
-                            line += f'<span style="{w_style}">{white_san}</span>{time_tag} '
+                            line += f'{w_dot}<span style="{w_style}">{white_san}</span>{time_tag} '
                             
                             # Black move
                             if i + 1 < len(move_texts) and i + 1 < end:
                                 black_san = move_texts[i + 1]['san']
                                 black_time = move_texts[i + 1]['time_spent']
+                                
+                                b_dot = ""
+                                if has_eval and i + 1 < len(cached_eval):
+                                    b_class = cached_eval.iloc[i + 1]['classification']
+                                    b_color = CLASS_COLORS.get(b_class, '')
+                                    if b_class in ('inaccuracy', 'mistake', 'blunder'):
+                                        b_dot = f'<span style="color:{b_color}; font-size:8px;">&#9679;</span> '
+                                
                                 if i + 1 == move_num - 1:
                                     b_style = "background:rgba(76,120,168,0.3); padding:1px 4px; border-radius:3px; font-weight:bold;"
                                 else:
                                     b_style = "padding:1px 4px;"
                                 
                                 b_time_tag = f'<span style="color:gray; font-size:10px;"> {black_time}</span>' if black_time else ''
-                                line += f'<span style="{b_style}">{black_san}</span>{b_time_tag}'
+                                line += f'{b_dot}<span style="{b_style}">{black_san}</span>{b_time_tag}'
                             
                             move_html += line + '<br>'
                         
