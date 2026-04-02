@@ -1,11 +1,10 @@
 {{
     config(
-        materialized ='incremental',
-        schema = 'silver',
-        unique_key = 'game_id'
+        materialized='incremental',
+        schema='silver',
+        unique_key='game_id'
     )
 }}
-
 
 WITH base AS (
     SELECT
@@ -17,6 +16,11 @@ WITH base AS (
             ELSE 'black'
         END AS player_color
     FROM {{ ref('bronze_raw_games') }}
+    {% if is_incremental() %}
+    WHERE to_timestamp(json_extract(game_json, '$.end_time')::BIGINT) > (
+        SELECT MAX(end_at) FROM {{ this }}
+    )
+    {% endif %}
 ),
 
 ratings AS (
@@ -40,7 +44,6 @@ ratings AS (
         END AS opponent_result_type
     FROM base
 )
-
 
 SELECT
     json_extract_string(game_json, '$.uuid') AS game_id,
