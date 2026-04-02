@@ -8,9 +8,19 @@ import io
 import math
 from pathlib import Path
 import shutil
+import os
 
 DB_PATH = str(Path(__file__).parent.parent / "data" / "chesslens.duckdb")
-STOCKFISH_PATH = shutil.which("stockfish") or str(Path(__file__).parent.parent / "bin" / "stockfish")
+
+def _find_stockfish():
+    path = shutil.which("stockfish")
+    if path:
+        return path
+    if os.path.exists("/usr/games/stockfish"):
+        return "/usr/games/stockfish"
+    return str(Path(__file__).parent.parent / "bin" / "stockfish")
+
+STOCKFISH_PATH = _find_stockfish()
 
 def run_query(query: str, params=None) -> pd.DataFrame:
     conn = duckdb.connect(DB_PATH, read_only=True)

@@ -14,7 +14,7 @@ st.write("Quick snapshot of your chess performance across all time controls.")
 
 username = get_username()
 
-df = run_query(f"SELECT * FROM main_gold.gold_time_control_comparison WHERE username = '{username}'")
+df = run_query("SELECT * FROM main_gold.gold_time_control_comparison WHERE username = ?", [username])
 
 if df.empty:
     st.warning("No data found for this user.")
