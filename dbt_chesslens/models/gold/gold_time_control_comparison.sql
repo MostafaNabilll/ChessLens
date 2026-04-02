@@ -42,5 +42,11 @@ SELECT
     cr.current_rating,
     t.opening_family AS most_played_opening
 FROM stats s
-LEFT JOIN current_ratings cr ON s.username = cr.username AND s.time_class = cr.time_class AND cr.rn = 1
-LEFT JOIN top_opening t ON s.username = t.username AND s.time_class = t.time_class AND t.rn = 1
+LEFT JOIN current_ratings cr 
+    ON s.username = cr.username 
+    AND s.time_class = cr.time_class 
+    AND cr.rn = 1
+LEFT JOIN top_opening t 
+    ON s.username = t.username 
+    AND s.time_class = t.time_class 
+    AND t.rn = 1

@@ -14,7 +14,7 @@ st.write("Track how your openings perform over time and spot what's improving or
 
 username = get_username()
 
-df = run_query(f"SELECT * FROM main_gold.gold_opening_trends WHERE username = '{username}'")
+df = run_query("SELECT * FROM main_gold.gold_opening_trends WHERE username = ?", [username])
 
 if df.empty:
     st.warning("No data found for this filter.")

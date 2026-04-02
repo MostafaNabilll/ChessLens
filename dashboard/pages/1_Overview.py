@@ -45,7 +45,8 @@ with cols[0]:
     st.metric(label="Total Games", value=total, delta=f"{overall_wr:.1%} win rate")
 
 with cols[1]:
-    longest_win = run_query(f"""
+    df = run_query("SELECT * FROM main_gold.gold_time_control_comparison WHERE username = ?", [username])
+    longest_win = run_query("""
         SELECT MAX(streak) as longest FROM (
             SELECT COUNT(*) as streak
             FROM (
@@ -53,18 +54,19 @@ with cols[1]:
                     SUM(CASE WHEN result != 'win' THEN 1 ELSE 0 END) 
                     OVER (ORDER BY end_at) as grp
                 FROM main_silver.silver_games
-                WHERE username = '{username}'
+                WHERE username = ?
             )
             WHERE result = 'win'
             GROUP BY grp
         )
-    """)['longest'].iloc[0]
+    """, [username])['longest'].iloc[0]
+
     if pd.isna(longest_win):
         longest_win = 0
     st.metric("Longest Win Streak", f"{int(longest_win)} games", delta=f"{int(longest_win)} in a row")
 
 with cols[2]:
-    longest_loss = run_query(f"""
+    longest_loss = run_query("""
         SELECT MAX(streak) as longest FROM (
             SELECT COUNT(*) as streak
             FROM (
@@ -72,25 +74,25 @@ with cols[2]:
                     SUM(CASE WHEN result != 'loss' THEN 1 ELSE 0 END) 
                     OVER (ORDER BY end_at) as grp
                 FROM main_silver.silver_games
-                WHERE username = '{username}'
+                WHERE username = ?
             )
             WHERE result = 'loss'
             GROUP BY grp
         )
-    """)['longest'].iloc[0]
+    """, [username])['longest'].iloc[0]
     if pd.isna(longest_loss):
         longest_loss = 0
     st.metric("Longest Loss Streak", f"{int(longest_loss)} games", delta=f"-{int(longest_loss)} in a row")
 
 # Win Rate by Color
 st.subheader("Win Rate by Color")
-df_color = run_query(f"""
+df_color = run_query("""
     SELECT player_color, COUNT(*) as games,
     AVG(CASE WHEN result = 'win' THEN 1 ELSE 0 END) as win_rate
     FROM main_silver.silver_games 
-    WHERE username = '{username}'
+    WHERE username = ?
     GROUP BY 1
-""")
+""", [username])
 
 if not df_color.empty and len(df_color) == 2:
     cols = st.columns(2)
@@ -105,7 +107,7 @@ st.divider()
 
 st.subheader("Rating Progression")
 
-time_classes_list = run_query(f"SELECT DISTINCT time_class FROM main_silver.silver_games WHERE username = '{username}'")['time_class'].tolist()
+time_classes_list = run_query("SELECT DISTINCT time_class FROM main_silver.silver_games WHERE username = ?", [username])['time_class'].tolist()
 
 if time_classes_list:
     rating_tc = st.selectbox("Time Control", 
@@ -113,13 +115,13 @@ if time_classes_list:
         index=get_tc_default(time_classes_list),
         key="rating_tc")
 
-    df_rating = run_query(f"""
+    df_rating = run_query("""
         SELECT end_at, player_rating 
         FROM main_silver.silver_games 
-        WHERE time_class = '{rating_tc}'
-        AND username = '{username}'
+        WHERE time_class = ?
+        AND username = ?
         ORDER BY end_at
-    """)
+    """, [rating_tc, username])
 
     if not df_rating.empty:
         fig = px.line(df_rating, x='end_at', y='player_rating',

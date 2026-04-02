@@ -14,7 +14,7 @@ st.write("Discover when you play your best chess based on time of day and day of
 
 username = get_username()
 
-df = run_query(f"SELECT * FROM main_gold.gold_time_of_day WHERE username = '{username}'")
+df = run_query("SELECT * FROM main_gold.gold_time_of_day WHERE username = ?", [username])
 
 if df.empty:
     st.warning("No data found for this filter.")

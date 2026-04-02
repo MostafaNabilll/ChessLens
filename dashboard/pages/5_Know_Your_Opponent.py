@@ -14,7 +14,7 @@ st.write("How do you perform against different strength opponents?")
 
 username = get_username()
 
-df = run_query(f"SELECT * FROM main_gold.gold_opponent_analysis WHERE username = '{username}'")
+df = run_query("SELECT * FROM main_gold.gold_opponent_analysis WHERE username = ?", [username])
 
 if df.empty:
     st.warning("No data found for this filter.")

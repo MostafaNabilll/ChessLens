@@ -18,23 +18,25 @@ username = get_username()
 # Compact filters
 c1, c2, c3 = st.columns([1, 1, 4])
 with c1:
-    time_classes = run_query(f"SELECT DISTINCT time_class FROM main_silver.silver_games WHERE username = '{username}'")['time_class'].tolist()
+    time_classes = run_query("SELECT DISTINCT time_class FROM main_silver.silver_games WHERE username = ?", [username])['time_class'].tolist()
     selected_tc = st.selectbox("Time Control", time_classes, index=get_tc_default(time_classes), key="replay_tc")
 with c2:
     result_filter = st.selectbox("Result", ["All", "win", "loss", "draw"], key="replay_result")
 
-query = f"""
+query = """
     SELECT game_id, end_at, player_color, player_rating, opponent_rating, 
            result, result_type, opening_family, pgn, opponent_result_type, time_control
     FROM main_silver.silver_games 
-    WHERE time_class = '{selected_tc}'
-    AND username = '{username}'
+    WHERE time_class = ?
+    AND username = ?
 """
+params = [selected_tc, username]
 if result_filter != "All":
-    query += f" AND result = '{result_filter}'"
+    query += " AND result = ?"
+    params.append(result_filter)
 query += " ORDER BY end_at DESC LIMIT 100"
 
-df = run_query(query)
+df = run_query(query, params)
 
 if df.empty:
     st.info("No games found for the selected filters.")

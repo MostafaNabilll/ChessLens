@@ -18,7 +18,7 @@ SELECT
     time_class,
     COUNT(*) AS games_played,
     AVG(CASE WHEN result = 'win' THEN 1 ELSE 0 END) AS win_rate,
-    AVG(rating_diff) AS avg_rating_delta
+    AVG(rating_diff) AS avg_opponent_gap
 
 FROM {{ ref('silver_games') }}
 GROUP BY 1, 2, 3, 4, 5

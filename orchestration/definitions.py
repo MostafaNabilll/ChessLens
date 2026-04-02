@@ -3,6 +3,7 @@ from dagster_dbt import DbtCliResource
 from .assets import raw_games, chesslens_dbt_assets, DBT_PROJECT_DIR, DBT_PROFILES_DIR
 import sys
 from pathlib import Path
+import shutil
 
 chesslens_job = define_asset_job("chesslens_job", selection="*")
 
@@ -11,7 +12,7 @@ chesslens_schedule = ScheduleDefinition(
     cron_schedule="0 6 * * *",
 )
 
-DBT_EXECUTABLE = str(Path(sys.executable).parent / "dbt.exe")
+DBT_EXECUTABLE = shutil.which("dbt") or str(Path(sys.executable).parent / "dbt")
 
 defs = Definitions(
     assets=[raw_games, chesslens_dbt_assets],

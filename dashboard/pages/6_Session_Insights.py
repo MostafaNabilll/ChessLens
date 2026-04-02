@@ -14,7 +14,7 @@ st.write("How does session length affect your performance? Should you stop after
 
 username = get_username()
 
-df = run_query(f"SELECT * FROM main_gold.gold_sessions WHERE username = '{username}'")
+df = run_query("SELECT * FROM main_gold.gold_sessions WHERE username = ?", [username])
 
 if df.empty:
     st.warning("No data found for this filter.")

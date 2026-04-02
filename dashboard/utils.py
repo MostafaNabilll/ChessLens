@@ -11,9 +11,12 @@ from pathlib import Path
 DB_PATH = str(Path(__file__).parent.parent / "data" / "chesslens.duckdb")
 STOCKFISH_PATH = str(Path(__file__).parent.parent / "bin" / "stockfish.exe")
 
-def run_query(query: str) -> pd.DataFrame:
+def run_query(query: str, params=None) -> pd.DataFrame:
     conn = duckdb.connect(DB_PATH, read_only=True)
-    result = conn.execute(query).fetchdf()
+    if params:
+        result = conn.execute(query, params).fetchdf()
+    else:
+        result = conn.execute(query).fetchdf()
     conn.close()
     return result
 
@@ -88,11 +91,11 @@ def init_eval_table():
 
 def get_cached_eval(game_id: str) -> pd.DataFrame:
     try:
-        return run_query(f"""
+        return run_query("""
             SELECT * FROM game_evaluations 
-            WHERE game_id = '{game_id}' 
+            WHERE game_id = ? 
             ORDER BY move_number
-        """)
+        """, [game_id])
     except:
         return pd.DataFrame()
 

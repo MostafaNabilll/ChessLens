@@ -13,15 +13,15 @@ st.write("Does losing make you lose more? This page tracks how consecutive losse
 
 username = get_username()
 
-df1 = run_query(f"""
+df1 = run_query("""
     SELECT
     is_tilted,
     COUNT(*) AS games,
     AVG(CASE WHEN result ='win' THEN 1 ELSE 0 END) as win_rate
     FROM main_gold.gold_tilt_analysis
-    WHERE username = '{username}'
+    WHERE username = ?
     GROUP BY 1
-""")
+""", [username])
 
 if df1.empty:
     st.warning("No data found for this filter.")
@@ -42,16 +42,17 @@ st.divider()
 st.subheader("Win Rate by Loss Streak")
 st.write("Each bar shows your win rate after N consecutive losses. Does your performance drop?")
 
-df2 = run_query(f"""
-SELECT
-    consecutive_losses_before,
-    COUNT(*) AS games,
-    AVG(CASE WHEN result = 'win' THEN 1 ELSE 0 END) AS win_rate
-FROM main_gold.gold_tilt_analysis
-WHERE username = '{username}'
-GROUP BY 1
-ORDER BY 1
-""")
+df2 = run_query("""
+    SELECT
+        consecutive_losses_before,
+        COUNT(*) AS games,
+        AVG(CASE WHEN result = 'win' THEN 1 ELSE 0 END) AS win_rate
+    FROM main_gold.gold_tilt_analysis
+    WHERE username = ?
+    GROUP BY 1
+    ORDER BY 1
+""", [username])
+
 
 fig = px.bar(df2, x='consecutive_losses_before', y='win_rate',
             text=df2.apply(lambda x: f"{x['win_rate']:.0%} ({int(x['games'])} game(s))", axis=1),

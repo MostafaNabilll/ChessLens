@@ -3,6 +3,10 @@ import requests
 import subprocess
 import sys
 from pathlib import Path
+import duckdb
+import os
+import shutil
+
 
 st.set_page_config(page_title="ChessLens", page_icon="♟️", layout="wide")
 
@@ -29,21 +33,21 @@ if 'chess_username' not in st.session_state:
             else:
                 st.session_state.chess_username = username.lower()
                 
-                import duckdb
-                import os
-                
                 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
                 
-                try:
-                    conn = duckdb.connect(DB_PATH, read_only=True)
-                    cnt = conn.execute(f"""
-                        SELECT COUNT(*) as cnt 
-                        FROM raw_games 
-                        WHERE username = '{username.lower()}'
-                    """).fetchone()[0]
-                    conn.close()
-                except:
+                if not os.path.exists(DB_PATH):
                     cnt = 0
+                else:
+                    try:
+                        conn = duckdb.connect(DB_PATH, read_only=True)
+                        cnt = conn.execute("""
+                            SELECT COUNT(*) as cnt 
+                            FROM raw_games 
+                            WHERE username = ?
+                        """, [username.lower()]).fetchone()[0]
+                        conn.close()
+                    except duckdb.Error:
+                        cnt = 0
                 
                 if cnt == 0:
                     with st.spinner(f"Pulling games for {username}... This may take a minute."):
@@ -60,7 +64,7 @@ if 'chess_username' not in st.session_state:
                         st.stop()
                     
                     with st.spinner("Transforming data..."):
-                        dbt_path = str(Path(sys.executable).parent / "dbt.exe")
+                        dbt_path = shutil.which("dbt") or str(Path(sys.executable).parent / "dbt")
                         dbt_project = str(Path(__file__).parent.parent / "dbt_chesslens")
                         result = subprocess.run([
                             dbt_path, "build", "--full-refresh",

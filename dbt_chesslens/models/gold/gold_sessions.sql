@@ -26,6 +26,7 @@ sessions AS (
 
 session_edges AS (
     SELECT DISTINCT
+        username,
         session_id,
         time_class,
         FIRST_VALUE(player_rating) OVER (PARTITION BY username, session_id, time_class ORDER BY end_at) AS rating_start,
@@ -50,5 +51,8 @@ SELECT
     se.rating_end,
     se.rating_end - se.rating_start AS rating_delta
 FROM sessions s
-JOIN session_edges se ON s.session_id = se.session_id AND s.time_class = se.time_class
+JOIN session_edges se 
+    ON s.username = se.username 
+    AND s.session_id = se.session_id 
+    AND s.time_class = se.time_class
 GROUP BY 1,2,3,10,11
