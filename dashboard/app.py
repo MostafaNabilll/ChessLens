@@ -2,19 +2,81 @@ import streamlit as st
 import requests
 import subprocess
 import sys
-from pathlib import Path
-import duckdb
 import os
 import shutil
-
+import duckdb
+from pathlib import Path
 
 st.set_page_config(page_title="ChessLens", page_icon="♟️", layout="wide")
 
 DB_PATH = str(Path(__file__).parent.parent / "data" / "chesslens.duckdb")
+DEFAULT_USERNAME = "maxime-ana"
 
+
+def run_pipeline(username, backfill=False):
+    """Run ingestion and dbt for a given username."""
+    args = [
+        sys.executable,
+        str(Path(__file__).parent.parent / "ingestion" / "extract.py"),
+        "--username", username
+    ]
+    if backfill:
+        args.insert(3, "--backfill")
+    
+    result = subprocess.run(args, capture_output=True, text=True)
+    if result.returncode != 0:
+        return False, f"Ingestion failed: {result.stderr}"
+    
+    dbt_path = shutil.which("dbt") or str(Path(sys.executable).parent / "dbt")
+    dbt_project = str(Path(__file__).parent.parent / "dbt_chesslens")
+    result = subprocess.run([
+        dbt_path, "build", "--full-refresh",
+        "--project-dir", dbt_project,
+        "--profiles-dir", dbt_project
+    ], capture_output=True, text=True, cwd=dbt_project)
+    
+    if result.returncode != 0:
+        return False, f"dbt failed: {result.stderr}\n{result.stdout}"
+    
+    return True, None
+
+
+def check_user_exists(username):
+    """Check if a username already has data in the DB."""
+    if not os.path.exists(DB_PATH):
+        return False
+    try:
+        conn = duckdb.connect(DB_PATH, read_only=True)
+        cnt = conn.execute(
+            "SELECT COUNT(*) FROM raw_games WHERE username = ?",
+            [username]
+        ).fetchone()[0]
+        conn.close()
+        return cnt > 0
+    except duckdb.Error:
+        return False
+
+
+def ensure_data(username):
+    """Make sure data exists for the username, run pipeline if not."""
+    if not check_user_exists(username):
+        os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+        with st.spinner(f"Pulling games for {username}... This may take a minute."):
+            ok, err = run_pipeline(username, backfill=True)
+        if not ok:
+            st.error(err)
+            return False
+    return True
+
+
+# Default to demo user, allow switching
 if 'chess_username' not in st.session_state:
+    st.session_state.chess_username = DEFAULT_USERNAME
+
+# Handle "enter new username" mode
+if st.session_state.get('switching_user'):
     st.title("ChessLens")
-    st.write("Enter your chess.com username to get started.")
+    st.write("Enter a chess.com username to analyze.")
     
     username = st.text_input("Chess.com Username")
     
@@ -32,78 +94,32 @@ if 'chess_username' not in st.session_state:
                 st.error(f"Username '{username}' not found on chess.com.")
             else:
                 st.session_state.chess_username = username.lower()
-                
-                os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-                
-                if not os.path.exists(DB_PATH):
-                    cnt = 0
-                else:
-                    try:
-                        conn = duckdb.connect(DB_PATH, read_only=True)
-                        cnt = conn.execute("""
-                            SELECT COUNT(*) as cnt 
-                            FROM raw_games 
-                            WHERE username = ?
-                        """, [username.lower()]).fetchone()[0]
-                        conn.close()
-                    except duckdb.Error:
-                        cnt = 0
-                
-                if cnt == 0:
-                    with st.spinner(f"Pulling games for {username}... This may take a minute."):
-                        result = subprocess.run([
-                            sys.executable, 
-                            str(Path(__file__).parent.parent / "ingestion" / "extract.py"),
-                            "--backfill",
-                            "--username", username.lower()
-                        ], capture_output=True, text=True)
-                    
-                    if result.returncode != 0:
-                        st.error(f"Ingestion failed: {result.stderr}")
-                        del st.session_state.chess_username
-                        st.stop()
-                    
-                    with st.spinner("Transforming data..."):
-                        dbt_path = shutil.which("dbt") or str(Path(sys.executable).parent / "dbt")
-                        dbt_project = str(Path(__file__).parent.parent / "dbt_chesslens")
-                        result = subprocess.run([
-                            dbt_path, "build", "--full-refresh",
-                            "--project-dir", dbt_project,
-                            "--profiles-dir", dbt_project
-                        ], capture_output=True, text=True, cwd=dbt_project)
-                    
-                    if result.returncode != 0:
-                        st.error(f"dbt failed: {result.stderr}")
-                        st.error(f"dbt stdout: {result.stdout}")
-                        del st.session_state.chess_username
-                        st.stop()
-                
-                st.rerun()
+                st.session_state.switching_user = False
+                if ensure_data(username.lower()):
+                    st.rerun()
+    
+    if st.button("Back to demo"):
+        st.session_state.chess_username = DEFAULT_USERNAME
+        st.session_state.switching_user = False
+        st.rerun()
 
 else:
+    # Make sure data exists for current user
+    if not ensure_data(st.session_state.chess_username):
+        st.stop()
+    
     st.sidebar.title("ChessLens")
     st.sidebar.caption(f"Player: {st.session_state.chess_username}")
     
     if st.sidebar.button("Refresh Data"):
         with st.spinner("Updating games..."):
-            result = subprocess.run([
-                sys.executable,
-                str(Path(__file__).parent.parent / "ingestion" / "extract.py"),
-                "--username", st.session_state.chess_username
-            ], capture_output=True, text=True)
-            
-            if result.returncode == 0:
-                dbt_path = str(Path(sys.executable).parent / "dbt.exe")
-                dbt_project = str(Path(__file__).parent.parent / "dbt_chesslens")
-                subprocess.run([
-                    dbt_path, "build", "--full-refresh",
-                    "--project-dir", dbt_project,
-                    "--profiles-dir", dbt_project
-                ], capture_output=True, text=True, cwd=dbt_project)
+            ok, err = run_pipeline(st.session_state.chess_username)
+        if not ok:
+            st.error(err)
         st.rerun()
     
     if st.sidebar.button("Switch User"):
-        del st.session_state.chess_username
+        st.session_state.switching_user = True
         st.rerun()
     
     overview = st.Page("pages/1_Overview.py", title="Overview", default=True)

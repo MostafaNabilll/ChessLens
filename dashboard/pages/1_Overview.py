@@ -45,7 +45,6 @@ with cols[0]:
     st.metric(label="Total Games", value=total, delta=f"{overall_wr:.1%} win rate")
 
 with cols[1]:
-    df = run_query("SELECT * FROM main_gold.gold_time_control_comparison WHERE username = ?", [username])
     longest_win = run_query("""
         SELECT MAX(streak) as longest FROM (
             SELECT COUNT(*) as streak
