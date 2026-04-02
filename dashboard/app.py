@@ -21,7 +21,7 @@ def run_pipeline(username, backfill=False):
         "--username", username
     ]
     if backfill:
-        args.insert(3, "--backfill")
+        args.append("--backfill")
     
     result = subprocess.run(args, capture_output=True, text=True)
     if result.returncode != 0:
