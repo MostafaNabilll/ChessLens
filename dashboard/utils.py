@@ -7,9 +7,10 @@ import subprocess
 import io
 import math
 from pathlib import Path
+import shutil
 
 DB_PATH = str(Path(__file__).parent.parent / "data" / "chesslens.duckdb")
-STOCKFISH_PATH = str(Path(__file__).parent.parent / "bin" / "stockfish.exe")
+STOCKFISH_PATH = shutil.which("stockfish") or str(Path(__file__).parent.parent / "bin" / "stockfish")
 
 def run_query(query: str, params=None) -> pd.DataFrame:
     conn = duckdb.connect(DB_PATH, read_only=True)
