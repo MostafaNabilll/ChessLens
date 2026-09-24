@@ -4,13 +4,14 @@ import streamlit as st
 import chess
 import chess.pgn
 import subprocess
+import shutil
 import io
+import os
 import math
 from pathlib import Path
-import shutil
-import os
 
 DB_PATH = str(Path(__file__).parent.parent / "data" / "chesslens.duckdb")
+
 
 def _find_stockfish():
     path = shutil.which("stockfish")
@@ -20,24 +21,24 @@ def _find_stockfish():
         return "/usr/games/stockfish"
     return str(Path(__file__).parent.parent / "bin" / "stockfish")
 
+
 STOCKFISH_PATH = _find_stockfish()
 
+
 def run_query(query: str, params=None) -> pd.DataFrame:
-    conn = duckdb.connect(DB_PATH, read_only=True)
-    if params:
-        result = conn.execute(query, params).fetchdf()
-    else:
-        result = conn.execute(query).fetchdf()
-    conn.close()
-    return result
+    with duckdb.connect(DB_PATH, read_only=True) as conn:
+        if params:
+            return conn.execute(query, params).fetchdf()
+        return conn.execute(query).fetchdf()
+
 
 def run_write(query: str, params=None):
-    conn = duckdb.connect(DB_PATH)
-    if params:
-        conn.execute(query, params)
-    else:
-        conn.execute(query)
-    conn.close()
+    with duckdb.connect(DB_PATH) as conn:
+        if params:
+            conn.execute(query, params)
+        else:
+            conn.execute(query)
+
 
 def apply_styles():
     st.markdown("""
@@ -58,6 +59,7 @@ def apply_styles():
         </style>
     """, unsafe_allow_html=True)
 
+
 def style_chart(fig, height=400, y_tickformat=None, showlegend=True):
     layout = dict(
         plot_bgcolor='rgba(0,0,0,0)',
@@ -74,6 +76,7 @@ def style_chart(fig, height=400, y_tickformat=None, showlegend=True):
     fig.update_layout(**layout)
     return fig
 
+
 def get_tc_default(options):
     if "All" in options:
         return options.index("All")
@@ -81,12 +84,13 @@ def get_tc_default(options):
         return options.index("rapid")
     return 0
 
+
 def get_username():
     return st.session_state.get('chess_username', '')
 
+
 def init_eval_table():
-    conn = duckdb.connect(DB_PATH)
-    conn.execute("""
+    run_write("""
         CREATE TABLE IF NOT EXISTS game_evaluations (
             game_id TEXT,
             move_number INT,
@@ -98,7 +102,7 @@ def init_eval_table():
             PRIMARY KEY (game_id, move_number)
         )
     """)
-    conn.close()
+
 
 def get_cached_eval(game_id: str) -> pd.DataFrame:
     try:
@@ -107,11 +111,13 @@ def get_cached_eval(game_id: str) -> pd.DataFrame:
             WHERE game_id = ? 
             ORDER BY move_number
         """, [game_id])
-    except:
+    except duckdb.Error:
         return pd.DataFrame()
+
 
 def cp_to_win_prob(cp):
     return 1 / (1 + 10 ** (-cp / 400))
+
 
 def classify_move(ep_lost):
     if ep_lost <= 0.0:
@@ -127,12 +133,13 @@ def classify_move(ep_lost):
     else:
         return "blunder"
 
+
 def calculate_accuracy(avg_ep_lost: float) -> float:
     if avg_ep_lost <= 0:
         return 100.0
-    # Sigmoid curve that keeps most scores between 30-95
     accuracy = 100 / (1 + math.exp(10 * (avg_ep_lost - 0.12)))
     return max(0, min(100, accuracy))
+
 
 def get_eval(fen):
     proc = subprocess.Popen(
@@ -142,13 +149,13 @@ def get_eval(fen):
         stderr=subprocess.PIPE,
         text=True
     )
-    
+
     proc.stdin.write("uci\n")
     proc.stdin.write("isready\n")
     proc.stdin.write(f"position fen {fen}\n")
     proc.stdin.write("go depth 20\n")
     proc.stdin.flush()
-    
+
     score = None
     while True:
         line = proc.stdout.readline()
@@ -156,95 +163,87 @@ def get_eval(fen):
             break
         if "score cp" in line:
             try:
-                cp_part = line.split("score cp ")[1].split(" ")[0]
-                score = int(cp_part)
-            except:
+                score = int(line.split("score cp ")[1].split(" ")[0])
+            except (IndexError, ValueError):
                 pass
         elif "score mate" in line:
             try:
-                mate_part = line.split("score mate ")[1].split(" ")[0]
-                score = 10000 if int(mate_part) > 0 else -10000
-            except:
+                mate = int(line.split("score mate ")[1].split(" ")[0])
+                score = 10000 if mate > 0 else -10000
+            except (IndexError, ValueError):
                 pass
         if "bestmove" in line:
             break
-    
+
     proc.stdin.write("quit\n")
     proc.stdin.flush()
     proc.kill()
-    
-    # Stockfish returns score from side to move's perspective
-    # Convert to white's perspective
-    if fen.split(" ")[1] == "b":
-        score = -score if score is not None else None
-    
+
+    # Stockfish scores from side to move, convert to white's perspective
+    if fen.split(" ")[1] == "b" and score is not None:
+        score = -score
+
     return score
+
 
 def evaluate_game(pgn_text: str, game_id: str, progress_callback=None):
     init_eval_table()
-    
+
     cached = get_cached_eval(game_id)
     if not cached.empty:
         return cached
-    
-    pgn_io = io.StringIO(pgn_text)
-    game = chess.pgn.read_game(pgn_io)
+
+    game = chess.pgn.read_game(io.StringIO(pgn_text))
     if not game:
         return pd.DataFrame()
-    
+
     board = game.board()
     moves_list = list(game.mainline_moves())
     evaluations = []
-    
-    # Initial position eval
+
     prev_eval = get_eval(board.fen())
-    
+
     for i, move in enumerate(moves_list):
         eval_before = prev_eval
-        
         board.push(move)
         eval_after = get_eval(board.fen())
-        
+
         if eval_before is not None and eval_after is not None:
-            if i % 2 == 0:  # white moved
+            if i % 2 == 0:
                 wp_before = cp_to_win_prob(eval_before)
                 wp_after = cp_to_win_prob(eval_after)
-            else:  # black moved
+            else:
                 wp_before = cp_to_win_prob(-eval_before)
                 wp_after = cp_to_win_prob(-eval_after)
-            
             ep_lost = max(0, wp_before - wp_after)
-            # Store as integer (multiply by 1000 for precision in DB)
             cp_loss_stored = int(ep_lost * 1000)
         else:
             ep_lost = 0
             cp_loss_stored = 0
-        
-        classification = classify_move(ep_lost)
-        
+
         evaluations.append({
             'game_id': game_id,
             'move_number': i + 1,
             'eval_before': eval_before or 0,
             'eval_after': eval_after or 0,
             'centipawn_loss': cp_loss_stored,
-            'classification': classification,
+            'classification': classify_move(ep_lost),
             'best_move': ''
-        }) 
+        })
 
         prev_eval = eval_after
-        
+
         if progress_callback:
             progress_callback((i + 1) / len(moves_list))
-    
-    # Cache results
-    conn = duckdb.connect(DB_PATH)
-    for ev in evaluations:
-        conn.execute("""
-            INSERT INTO game_evaluations (game_id, move_number, eval_before, eval_after, centipawn_loss, classification, best_move)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT (game_id, move_number) DO NOTHING
-        """, (ev['game_id'], ev['move_number'], ev['eval_before'], ev['eval_after'], ev['centipawn_loss'], ev['classification'], ev['best_move']))
-    conn.close()
-    
+
+    with duckdb.connect(DB_PATH) as conn:
+        for ev in evaluations:
+            conn.execute("""
+                INSERT INTO game_evaluations 
+                (game_id, move_number, eval_before, eval_after, centipawn_loss, classification, best_move)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (game_id, move_number) DO NOTHING
+            """, (ev['game_id'], ev['move_number'], ev['eval_before'], ev['eval_after'],
+                  ev['centipawn_loss'], ev['classification'], ev['best_move']))
+
     return pd.DataFrame(evaluations)
