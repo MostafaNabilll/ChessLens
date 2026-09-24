@@ -1,6 +1,8 @@
 import streamlit as st
 import requests
 import subprocess
+import threading
+import time
 import sys
 import os
 import shutil
@@ -11,6 +13,12 @@ st.set_page_config(page_title="ChessLens", page_icon="♟️", layout="wide")
 
 DB_PATH = str(Path(__file__).parent.parent / "data" / "chesslens.duckdb")
 DEFAULT_USERNAME = "maxime-ana"
+
+
+@st.cache_resource
+def get_pipeline_lock():
+    """One lock shared by every session, so only one pipeline writes at a time."""
+    return threading.Lock()
 
 
 def run_pipeline(username, backfill=False):
@@ -41,30 +49,41 @@ def run_pipeline(username, backfill=False):
     return True, None
 
 
-def check_user_exists(username):
-    """Check if a username has fully processed data in the gold layer."""
+def check_user_exists(username, retries=60):
+    """True if the user has data in the gold layer. Waits if another process holds the lock."""
     if not os.path.exists(DB_PATH):
         return False
-    try:
-        with duckdb.connect(DB_PATH, read_only=True) as conn:
-            cnt = conn.execute(
-                "SELECT COUNT(*) FROM main_gold.gold_time_control_comparison WHERE username = ?",
-                [username]
-            ).fetchone()[0]
-        return cnt > 0
-    except duckdb.Error:
-        return False
+    for _ in range(retries):
+        try:
+            with duckdb.connect(DB_PATH, read_only=True) as conn:
+                cnt = conn.execute(
+                    "SELECT COUNT(*) FROM main_gold.gold_time_control_comparison WHERE username = ?",
+                    [username]
+                ).fetchone()[0]
+            return cnt > 0
+        except duckdb.CatalogException:
+            return False
+        except duckdb.IOException:
+            time.sleep(1)
+    return False
 
 
 def ensure_data(username):
     """Make sure data exists for the username, run pipeline if not."""
-    if not check_user_exists(username):
-        os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-        with st.spinner(f"Pulling games for {username}... This may take a minute."):
+    if check_user_exists(username):
+        return True
+
+    with st.spinner(f"Pulling games for {username}... This may take a minute."):
+        with get_pipeline_lock():
+            # Another session may have built it while we waited for the lock
+            if check_user_exists(username):
+                return True
+            os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
             ok, err = run_pipeline(username, backfill=True)
-        if not ok:
-            st.error(err)
-            return False
+
+    if not ok:
+        st.error(err)
+        return False
     return True
 
 
@@ -109,7 +128,8 @@ else:
 
     if st.sidebar.button("Refresh Data"):
         with st.spinner("Updating games..."):
-            ok, err = run_pipeline(st.session_state.chess_username)
+            with get_pipeline_lock():
+                ok, err = run_pipeline(st.session_state.chess_username)
         if not ok:
             st.error(err)
         st.rerun()

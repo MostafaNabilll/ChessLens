@@ -16,9 +16,9 @@ import os
 import requests
 import duckdb
 import time
-import json 
+import json
 
-load_dotenv() 
+load_dotenv()
 
 BASE_URL = "https://api.chess.com/pub"
 
@@ -29,13 +29,23 @@ HEADERS = {
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "chesslens.duckdb")
 
 
+def connect_with_retry(db_path: str, retries: int = 60):
+    """Open a write connection, waiting if a dashboard read briefly holds the file."""
+    for attempt in range(retries):
+        try:
+            return duckdb.connect(db_path)
+        except duckdb.IOException:
+            if attempt == retries - 1:
+                raise
+            time.sleep(1)
+
+
 def get_game_archives(username: str) -> list[str]:
     """Fetch all monthly archive URLs for a given chess.com player."""
     archives_endpoint = f"{BASE_URL}/player/{username}/games/archives"
     response = requests.get(archives_endpoint, headers=HEADERS)
     response.raise_for_status()
-    data = response.json()
-    archives = data.get("archives", [])
+    archives = response.json().get("archives", [])
     print(f"Found {len(archives)} monthly archives")
     return archives
 
@@ -45,35 +55,36 @@ def get_games_for_month(archive_url: str) -> list[dict]:
     time.sleep(1)
     response = requests.get(archive_url, headers=HEADERS)
     response.raise_for_status()
-    data = response.json()
-    games = data.get('games', [])
+    games = response.json().get("games", [])
     print(f"Found {len(games)} games for {archive_url}")
     return games
 
 
 def load_to_duckdb(games: list[dict], db_path: str, username: str):
     """Load raw game JSON into DuckDB, skipping duplicates."""
-    conn = duckdb.connect(db_path)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS raw_games (
-            game_url TEXT PRIMARY KEY,
-            game_json JSON,
-            username TEXT
-        )
-    """)
-    for game in games:
-        game_url = game.get('url')
-        if not game_url:
-            continue
-        try:
-            conn.execute("""
-                INSERT INTO raw_games (game_url, game_json, username)
-                VALUES (?, ?, ?)
-                ON CONFLICT (game_url) DO NOTHING
-            """, (game_url, json.dumps(game), username.lower()))
-        except Exception as e:
-            print(f'Error inserting game {game_url}: {e}')
-    conn.close()
+    conn = connect_with_retry(db_path)
+    try:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS raw_games (
+                game_url TEXT PRIMARY KEY,
+                game_json JSON,
+                username TEXT
+            )
+        """)
+        for game in games:
+            game_url = game.get("url")
+            if not game_url:
+                continue
+            try:
+                conn.execute("""
+                    INSERT INTO raw_games (game_url, game_json, username)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT (game_url) DO NOTHING
+                """, (game_url, json.dumps(game), username.lower()))
+            except duckdb.Error as e:
+                print(f"Error inserting game {game_url}: {e}")
+    finally:
+        conn.close()
     print(f"Loaded {len(games)} games into DuckDB")
 
 

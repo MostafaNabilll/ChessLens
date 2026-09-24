@@ -8,6 +8,7 @@ import shutil
 import io
 import os
 import math
+import time
 from pathlib import Path
 
 DB_PATH = str(Path(__file__).parent.parent / "data" / "chesslens.duckdb")
@@ -25,11 +26,17 @@ def _find_stockfish():
 STOCKFISH_PATH = _find_stockfish()
 
 
-def run_query(query: str, params=None) -> pd.DataFrame:
-    with duckdb.connect(DB_PATH, read_only=True) as conn:
-        if params:
-            return conn.execute(query, params).fetchdf()
-        return conn.execute(query).fetchdf()
+def run_query(query: str, params=None, retries: int = 60) -> pd.DataFrame:
+    for attempt in range(retries):
+        try:
+            with duckdb.connect(DB_PATH, read_only=True) as conn:
+                if params:
+                    return conn.execute(query, params).fetchdf()
+                return conn.execute(query).fetchdf()
+        except duckdb.IOException:
+            if attempt == retries - 1:
+                raise
+            time.sleep(1)
 
 
 def run_write(query: str, params=None):
