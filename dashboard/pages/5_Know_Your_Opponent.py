@@ -4,66 +4,80 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 import streamlit as st
 import plotly.express as px
-import pandas as pd
 from utils import run_query, apply_styles, get_tc_default, get_username, style_chart
 
 apply_styles()
 
+MIN_GAMES = 5
+BUCKET_LABELS = {
+    'much_lower': '200+ lower',
+    'lower': '50 to 200 lower',
+    'equal': 'Within 50',
+    'higher': '50 to 200 higher',
+    'much_higher': '200+ higher',
+}
+
 st.header("Know Your Opponent")
-st.write("How do you perform against different strength opponents?")
+st.write("How do you perform against weaker, equal, and stronger opponents?")
+st.caption("Opponents are grouped by their rating relative to yours at the time of the game.")
 
 username = get_username()
 
 df = run_query("SELECT * FROM main_gold.gold_opponent_analysis WHERE username = ?", [username])
 
 if df.empty:
-    st.warning("No data found for this filter.")
+    st.info("No games found for this account yet.")
     st.stop()
 
-# Filter
 time_classes = df['time_class'].unique().tolist()
 selected_tc = st.selectbox("Time Control", time_classes, index=get_tc_default(time_classes), key="opponent_tc")
-df = df[df['time_class'] == selected_tc]
+df = df[df['time_class'] == selected_tc].copy()
+
+df['bucket_label'] = df['rating_bucket'].map(BUCKET_LABELS)
+df['order'] = df['rating_bucket'].map({k: i for i, k in enumerate(BUCKET_LABELS)})
+df = df.sort_values('order')
 
 st.divider()
 
-# Order buckets logically
-bucket_order = ['much_lower', 'lower', 'equal', 'higher', 'much_higher']
-df['rating_bucket'] = pd.Categorical(df['rating_bucket'], categories=bucket_order, ordered=True)
-df = df.sort_values('rating_bucket')
-
-# Win rate by rating bucket
 st.subheader("Win Rate by Opponent Strength")
-fig = px.bar(df, x='rating_bucket', y='win_rate',
-            text=df.apply(lambda x: f"{x['win_rate']:.0%} ({int(x['games_played'])} games(s))", axis=1),
+fig = px.bar(df, x='bucket_label', y='win_rate',
+            text=df.apply(lambda x: f"{x['win_rate']:.0%} ({int(x['games_played'])} games)", axis=1),
             color='win_rate',
             color_continuous_scale='RdYlGn',
-            labels={'rating_bucket': 'Opponent Strength', 'win_rate': 'Win Rate'})
+            category_orders={'bucket_label': list(BUCKET_LABELS.values())},
+            labels={'bucket_label': 'Opponent Rating vs Yours', 'win_rate': 'Win Rate'})
 fig.update_traces(textposition='outside', marker_line_width=0)
 style_chart(fig, height=450, y_tickformat='.0%')
 st.plotly_chart(fig, width='stretch')
 
 st.divider()
 
-# Upset stats
 st.subheader("Upset Wins")
-total_upsets = int(df['upset_wins'].sum())
-higher_games = df[df['rating_bucket'].isin(['higher', 'much_higher'])]['games_played'].sum()
+st.caption("An upset is a win against someone the rating system expected you to lose to.")
+higher_df = df[df['rating_bucket'].isin(['higher', 'much_higher'])]
+higher_upsets = int(higher_df['upset_wins'].sum())
+higher_games = int(higher_df['games_played'].sum())
 
 cols = st.columns(2)
 with cols[0]:
-    st.metric("Total Upset Wins", total_upsets)
+    st.metric("Total Upset Wins", int(df['upset_wins'].sum()))
 with cols[1]:
-    higher_df = df[df['rating_bucket'].isin(['higher', 'much_higher'])]
-    higher_upsets = int(higher_df['upset_wins'].sum())
-    higher_games = int(higher_df['games_played'].sum())
     if higher_games > 0:
-        overall_upset_rate = higher_upsets / higher_games
-        st.metric("Upset Rate vs Stronger Opponents", f"{overall_upset_rate:.0%}")
+        st.metric("Win Rate vs Stronger Opponents", f"{higher_upsets / higher_games:.0%}", delta=f"{higher_games} games", delta_color="off")
+    else:
+        st.metric("Win Rate vs Stronger Opponents", "No games")
 
-# Takeaway
-if not df.empty:
-    best_bucket = df.loc[df['win_rate'].idxmax()]
-    worst_bucket = df.loc[df['win_rate'].idxmin()]
-    st.success(f"Strongest against **{best_bucket['rating_bucket']}** rated opponents ({best_bucket['win_rate']:.0%} win rate)")
-    st.error(f"Weakest against **{worst_bucket['rating_bucket']}** rated opponents ({worst_bucket['win_rate']:.0%} win rate)")
+
+
+def describe(bucket):
+    if bucket == 'equal':
+        return "rated within 50 of you"
+    return f"rated {BUCKET_LABELS[bucket]} than you"
+
+
+reliable = df[df['games_played'] >= MIN_GAMES]
+if len(reliable) >= 2:
+    best = reliable.loc[reliable['win_rate'].idxmax()]
+    worst = reliable.loc[reliable['win_rate'].idxmin()]
+    st.success(f"Strongest against opponents **{describe(best['rating_bucket'])}** ({best['win_rate']:.0%} win rate)")
+    st.error(f"Weakest against opponents **{describe(worst['rating_bucket'])}** ({worst['win_rate']:.0%} win rate)")
