@@ -13,6 +13,10 @@ from pathlib import Path
 
 DB_PATH = str(Path(__file__).parent.parent / "data" / "chesslens.duckdb")
 
+DEFAULT_USERNAME = "maxime-ana"
+GITHUB_URL = "https://github.com/MostafaNabilll/ChessLens"
+ARTICLE_URL = "https://medium.com/@mostafaanany/i-played-1-379-chess-games-in-3-months-the-data-explains-why-i-keep-losing-6134fbfac003"
+
 
 def _find_stockfish():
     path = shutil.which("stockfish")

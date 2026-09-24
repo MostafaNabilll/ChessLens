@@ -12,6 +12,44 @@ from utils import run_query, apply_styles, get_tc_default, get_username, evaluat
 apply_styles()
 
 st.header("Game Replay")
+st.write("Replay any of your last 100 games move by move, and run Stockfish to see where it was won or lost.")
+
+
+def parse_initial_seconds(time_control):
+    """'600' or '180+2' gives starting seconds. Daily games ('1/86400') have no game clock."""
+    tc = str(time_control)
+    if "/" in tc:
+        return None
+    try:
+        return int(tc.split("+")[0])
+    except ValueError:
+        return None
+
+
+def parse_clock(comment):
+    if "%clk" not in comment:
+        return None
+    try:
+        clock_str = comment.split("%clk ")[1].split("]")[0]
+        h, m, sec = clock_str.split(":")
+        return int(h) * 3600 + int(m) * 60 + float(sec)
+    except (IndexError, ValueError):
+        return None
+
+
+def format_eval(score):
+    if abs(score) >= 10000:
+        return "Mate" if score > 0 else "-Mate"
+    return f"+{score / 100:.1f}" if score >= 0 else f"{score / 100:.1f}"
+
+
+def go_to(pos):
+    st.session_state.move_pos = pos
+
+
+def step(delta, total):
+    st.session_state.move_pos = max(0, min(total, st.session_state.move_pos + delta))
+
 
 username = get_username()
 
@@ -50,6 +88,11 @@ else:
         selected_label = st.selectbox("Game", df['label'].tolist(), key="game_select")
     
     selected_game = df[df['label'] == selected_label].iloc[0]
+    game_id = selected_game['game_id']
+
+    if st.session_state.get('replay_game_id') != game_id:
+        st.session_state.replay_game_id = game_id
+        st.session_state.move_pos = 0
     
     # Info bar
     if selected_game['result'] == 'win':
@@ -90,8 +133,7 @@ else:
             move_texts = []
             
             # Get initial time from time_control
-            tc_str = str(selected_game['time_control'])
-            initial_seconds = int(tc_str.split("+")[0]) if "+" in tc_str else int(tc_str)
+            initial_seconds = parse_initial_seconds(selected_game['time_control'])
             
             # Parse moves with clock times
             for node in game.mainline():
@@ -101,16 +143,9 @@ else:
                 board.push(move)
                 positions.append(board.copy())
                 
-                comment = node.comment
-                clock_seconds = None
-                if "%clk" in comment:
-                    clock_str = comment.split("%clk ")[1].split("]")[0]
-                    parts = clock_str.split(":")
-                    clock_seconds = int(parts[0]) * 3600 + int(parts[1]) * 60 + float(parts[2])
-                
                 move_texts.append({
                     'san': move_san,
-                    'clock_seconds': clock_seconds
+                    'clock_seconds': parse_clock(node.comment) if initial_seconds else None
                 })
             
             # Calculate time spent per move
@@ -141,13 +176,12 @@ else:
                 st.session_state.move_pos = total_moves
             
             # Check if analysis exists
-            game_id = selected_game['game_id']
             cached_eval = get_cached_eval(game_id)
             has_eval = not cached_eval.empty
             
             # Analyze button
             if not has_eval:
-                if st.button("Analyze with Stockfish", use_container_width=True):
+                if st.button("Analyze with Stockfish (takes 30 to 60 seconds)", type="primary", width="stretch"):
                     progress_bar = st.progress(0, text="Analyzing positions...")
                     
                     def update_progress(pct):
@@ -212,8 +246,8 @@ else:
                         margin: 0 0 10px 0;
                         font-size: 13px;
                     ">
-                        <span>You: <strong style="color:{p_color}; font-size:16px;">{player_acc:.1f}%</strong></span>
-                        <span>Opponent: <strong style="color:{o_color}; font-size:16px;">{opponent_acc:.1f}%</strong></span>
+                        <span>Your accuracy: <strong style="color:{p_color}; font-size:16px;">{player_acc:.1f}%*</strong></span>
+                        <span>Opponent: <strong style="color:{o_color}; font-size:16px;">{opponent_acc:.1f}%*</strong></span>
                         <span>|</span>
                         <span style="color:#2ecc71;">Best: {best_moves}</span>
                         <span style="color:#66bb6a;">Excellent: {excellent_moves}</span>
@@ -223,6 +257,11 @@ else:
                         <span style="color:#e74c3c;">Blunder: {blunders}</span>
                     </div>
                 """, unsafe_allow_html=True)
+                st.caption(
+                    "*Estimated from Stockfish at depth 20. Chess.com uses a proprietary formula, "
+                    "so expect differences, especially in games with many mistakes. "
+                    "Move counts are for your moves only."
+                )
             
             # Board and moves side by side
             board_col, moves_col = st.columns([1, 1])
@@ -251,7 +290,7 @@ else:
                     white_pct = max(5, min(95, white_pct))
                     black_pct = 100 - white_pct
                     
-                    eval_display = f"+{eval_score / 100:.1f}" if eval_score >= 0 else f"{eval_score / 100:.1f}"
+                    eval_display = format_eval(eval_score)
                     
                     eval_bar_html = f"""
                     <div style="display:flex; gap:10px; align-items:stretch; justify-content:center;">
@@ -270,33 +309,18 @@ else:
                 # Spacing between board and buttons
                 st.markdown("<div style='height: 20px'></div>", unsafe_allow_html=True)
                 
-                st.markdown("""
-                    <style>
-                        .replay-nav button {
-                            border-radius: 8px;
-                            font-weight: bold;
-                            font-size: 18px;
-                        }
-                    </style>
-                """, unsafe_allow_html=True)
-                
+                # on_click runs before the rerun, so the board always matches the counter
                 n1, n2, n3, n4, n5 = st.columns([1, 1, 2, 1, 1])
                 with n1:
-                    if st.button("<<", use_container_width=True):
-                        st.session_state.move_pos = 0
+                    st.button("<<", key="nav_first", on_click=go_to, args=(0,), width="stretch")
                 with n2:
-                    if st.button("<", use_container_width=True):
-                        if st.session_state.move_pos > 0:
-                            st.session_state.move_pos -= 1
+                    st.button("<", key="nav_prev", on_click=step, args=(-1, total_moves), width="stretch")
                 with n3:
                     st.markdown(f"<div style='text-align:center; padding:10px; color:gray; font-size:14px; font-weight:bold;'>{move_num} / {total_moves}</div>", unsafe_allow_html=True)
                 with n4:
-                    if st.button("\\>", use_container_width=True):
-                        if st.session_state.move_pos < total_moves:
-                            st.session_state.move_pos += 1
+                    st.button("\\>", key="nav_next", on_click=step, args=(1, total_moves), width="stretch")
                 with n5:
-                    if st.button("\\>>", use_container_width=True):
-                        st.session_state.move_pos = total_moves
+                    st.button("\\>>", key="nav_last", on_click=go_to, args=(total_moves,), width="stretch")
             
             with moves_col:
                 # Classification colors for dots

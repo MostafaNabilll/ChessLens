@@ -5,14 +5,27 @@ import threading
 import time
 import sys
 import os
+import re
 import shutil
 import duckdb
 from pathlib import Path
+from utils import DEFAULT_USERNAME, GITHUB_URL, ARTICLE_URL
 
 st.set_page_config(page_title="ChessLens", page_icon="♟️", layout="wide")
 
-DB_PATH = str(Path(__file__).parent.parent / "data" / "chesslens.duckdb")
-DEFAULT_USERNAME = "maxime-ana"
+DATA_DIR = Path(__file__).parent.parent / "data"
+DB_PATH = str(DATA_DIR / "chesslens.duckdb")
+DEMO_DB_PATH = str(DATA_DIR / "demo.duckdb")
+USERNAME_PATTERN = re.compile(r"[A-Za-z0-9_-]{3,25}")
+
+
+@st.cache_resource
+def seed_demo_database():
+    """On a cold start, copy the pre-built demo database so the demo loads instantly."""
+    os.makedirs(DATA_DIR, exist_ok=True)
+    if not os.path.exists(DB_PATH) and os.path.exists(DEMO_DB_PATH):
+        shutil.copy(DEMO_DB_PATH, DB_PATH)
+    return True
 
 
 @st.cache_resource
@@ -73,12 +86,11 @@ def ensure_data(username):
     if check_user_exists(username):
         return True
 
-    with st.spinner(f"Pulling games for {username}... This may take a minute."):
+    with st.spinner(f"Pulling every public game for {username} and running the pipeline..."):
         with get_pipeline_lock():
             # Another session may have built it while we waited for the lock
             if check_user_exists(username):
                 return True
-            os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
             ok, err = run_pipeline(username, backfill=True)
 
     if not ok:
@@ -87,56 +99,80 @@ def ensure_data(username):
     return True
 
 
+seed_demo_database()
+
 if 'chess_username' not in st.session_state:
     st.session_state.chess_username = DEFAULT_USERNAME
 
 if st.session_state.get('switching_user'):
-    st.title("ChessLens")
-    st.write("Enter a chess.com username to analyze.")
+    st.title("Analyze your own games")
+    st.write(
+        "Enter any chess.com username. ChessLens pulls every public game, runs it through "
+        "the pipeline, and builds your dashboard. It usually takes about a minute, "
+        "longer for accounts with thousands of games."
+    )
 
-    username = st.text_input("Chess.com Username")
+    username = st.text_input("Chess.com username", placeholder="your chess.com username").strip().lower()
 
-    if st.button("Analyze"):
-        if not username:
-            st.error("Please enter a username.")
-        else:
-            with st.spinner("Checking username..."):
-                resp = requests.get(
-                    f"https://api.chess.com/pub/player/{username.lower()}",
-                    headers={"User-Agent": "ChessLens/1.0"}
-                )
+    c1, c2, _ = st.columns([1, 1, 4])
+    with c1:
+        analyze = st.button("Analyze", type="primary", width="stretch")
+    with c2:
+        back = st.button("Back to demo", width="stretch")
 
-            if resp.status_code != 200:
-                st.error(f"Username '{username}' not found on chess.com.")
-            else:
-                st.session_state.chess_username = username.lower()
-                st.session_state.switching_user = False
-                if ensure_data(username.lower()):
-                    st.rerun()
-
-    if st.button("Back to demo"):
+    if back:
         st.session_state.chess_username = DEFAULT_USERNAME
         st.session_state.switching_user = False
         st.rerun()
+
+    if analyze:
+        if not USERNAME_PATTERN.fullmatch(username):
+            st.error("That doesn't look like a chess.com username. Use 3 to 25 letters, numbers, dashes or underscores.")
+        else:
+            with st.spinner("Checking username..."):
+                resp = requests.get(
+                    f"https://api.chess.com/pub/player/{username}",
+                    headers={"User-Agent": "ChessLens/1.0"}
+                )
+            if resp.status_code != 200:
+                st.error(f"Username '{username}' not found on chess.com.")
+            elif ensure_data(username):
+                st.session_state.chess_username = username
+                st.session_state.switching_user = False
+                st.rerun()
 
 else:
     if not ensure_data(st.session_state.chess_username):
         st.stop()
 
+    is_demo = st.session_state.chess_username == DEFAULT_USERNAME
+
     st.sidebar.title("ChessLens")
-    st.sidebar.caption(f"Player: {st.session_state.chess_username}")
+    if is_demo:
+        st.sidebar.caption(f"Viewing demo account: {st.session_state.chess_username}")
+    else:
+        st.sidebar.caption(f"Player: {st.session_state.chess_username}")
 
-    if st.sidebar.button("Refresh Data"):
-        with st.spinner("Updating games..."):
-            with get_pipeline_lock():
-                ok, err = run_pipeline(st.session_state.chess_username)
-        if not ok:
-            st.error(err)
-        st.rerun()
-
-    if st.sidebar.button("Switch User"):
+    if st.sidebar.button("Analyze your own games", type="primary", width="stretch"):
         st.session_state.switching_user = True
         st.rerun()
+
+    if not is_demo and st.sidebar.button("Back to demo", width="stretch"):
+        st.session_state.chess_username = DEFAULT_USERNAME
+        st.rerun()
+
+    if st.sidebar.button("Refresh data", width="stretch"):
+        with st.spinner("Pulling this month's games..."):
+            with get_pipeline_lock():
+                ok, err = run_pipeline(st.session_state.chess_username)
+        if ok:
+            st.rerun()
+        st.sidebar.error("Refresh failed. Try again in a minute.")
+        with st.sidebar.expander("Details"):
+            st.code(err)
+
+    st.sidebar.divider()
+    st.sidebar.markdown(f"[Source code on GitHub]({GITHUB_URL})  \n[How it was built]({ARTICLE_URL})")
 
     overview = st.Page("pages/1_Overview.py", title="Overview", default=True)
     tilt = st.Page("pages/2_Tilt_Tracker.py", title="Tilt Tracker")

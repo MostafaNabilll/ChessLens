@@ -28,3 +28,5 @@ orchestration/.dagster/
 .env
 
 bin/
+# Pre-built demo database, committed so the demo loads instantly
+!data/demo.duckdb
